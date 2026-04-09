@@ -2,43 +2,11 @@
 
 @theme {
   --font-mono: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
-  
-  --color-bg: #0a0a0a;
-  --color-bg-elevated: #141414;
-  --color-bg-subtle: #1a1a1a;
-  --color-border: #2a2a2a;
-  --color-border-hover: #3a3a3a;
-  --color-text: #e5e5e5;
-  --color-text-muted: #888888;
-  --color-text-subtle: #555555;
-  --color-accent: #3b82f6;
-  --color-accent-hover: #60a5fa;
-  --color-success: #22c55e;
-  --color-warning: #eab308;
-  --color-error: #ef4444;
 }
 
 body {
-  background-color: var(--color-bg);
-  color: var(--color-text);
+  background-color: #09090b;
+  color: #e4e4e7;
   font-family: var(--font-mono);
   -webkit-font-smoothing: antialiased;
-}
-
-::-webkit-scrollbar {
-  width: 8px;
-  height: 8px;
-}
-
-::-webkit-scrollbar-track {
-  background: var(--color-bg-subtle);
-}
-
-::-webkit-scrollbar-thumb {
-  background: var(--color-border);
-  border-radius: 4px;
-}
-
-::-webkit-scrollbar-thumb:hover {
-  background: var(--color-border-hover);
 }
