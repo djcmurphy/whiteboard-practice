@@ -15,6 +15,8 @@ export function SessionPage({ onFinish }: SessionPageProps) {
     problem,
     notes,
     setNotes,
+    privateNotes,
+    setPrivateNotes,
     questions,
     addQuestion,
     excalidrawData,
@@ -27,6 +29,9 @@ export function SessionPage({ onFinish }: SessionPageProps) {
   } = useSessionStore();
 
   const [newQuestion, setNewQuestion] = useState("");
+  const [llmQuestion, setLlmQuestion] = useState("");
+  const [llmAnswer, setLlmAnswer] = useState("");
+  const [isAskingLlm, setIsAskingLlm] = useState(false);
   const excalidrawAPIRef = useRef<any>(null);
   const isFinished = useRef(false);
   const lastSaveRef = useRef(0);
@@ -48,8 +53,8 @@ export function SessionPage({ onFinish }: SessionPageProps) {
     const now = Date.now();
     if (now - lastSaveRef.current > 10000) {
       lastSaveRef.current = now;
-      api.saveSession(sessionId, notes, questions, { 
-        elements: excalidrawAPIRef.current?.getSceneElements() || [] 
+      api.saveSession(sessionId, notes, questions, {
+        elements: excalidrawAPIRef.current?.getSceneElements() || [],
       });
     }
   }, [sessionId, notes, questions]);
@@ -66,8 +71,8 @@ export function SessionPage({ onFinish }: SessionPageProps) {
     isFinished.current = true;
     setIsLoading(true);
     if (sessionId && excalidrawAPIRef.current) {
-      await api.saveSession(sessionId, notes, questions, { 
-        elements: excalidrawAPIRef.current.getSceneElements() 
+      await api.saveSession(sessionId, notes, questions, {
+        elements: excalidrawAPIRef.current.getSceneElements(),
       });
     }
     try {
@@ -104,22 +109,42 @@ export function SessionPage({ onFinish }: SessionPageProps) {
     }
   };
 
-  const excalidrawOptions = useMemo(() => ({
-    canvasActions: {
-      changeViewBackgroundColor: false,
-      clearCanvas: true,
-    },
-  }), []);
+  const handleAskLlm = async () => {
+    if (!llmQuestion.trim() || isAskingLlm) return;
+    setIsAskingLlm(true);
+    setLlmAnswer("...");
+    try {
+      const res = await fetch("http://localhost:3001/api/test", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ prompt: llmQuestion }),
+      });
+      const data = await res.json();
+      setLlmAnswer(data.response || "No response");
+    } catch (e) {
+      setLlmAnswer("Error: " + String(e));
+    }
+    setIsAskingLlm(false);
+  };
+
+  const excalidrawOptions = useMemo(
+    () => ({
+      canvasActions: {
+        changeViewBackgroundColor: false,
+        clearCanvas: true,
+      },
+    }),
+    [],
+  );
 
   return (
     <div className="flex flex-col h-full">
       <div className="flex items-center justify-between mb-4 pb-4 border-b border-zinc-200">
         <div className="flex-1 pr-4">
           <p className="text-xs text-zinc-400">// problem</p>
-          <p className="text-sm font-medium text-zinc-800">
+          <p className="text-base font-medium text-zinc-800">
             {problem?.title || "Untitled"}
           </p>
-          <p className="text-xs text-zinc-500 mt-1">{problem?.description}</p>
         </div>
 
         <div
@@ -144,61 +169,134 @@ export function SessionPage({ onFinish }: SessionPageProps) {
         </div>
       </div>
 
-      <div className="flex-1 grid grid-cols-4 gap-4" style={{ minHeight: 0 }}>
-        <div className="col-span-2 border border-zinc-200 bg-white overflow-hidden" style={{ height: '100%', minHeight: '400px' }}>
-          <div style={{ height: '100%' }}>
+      <div className="flex-1 grid grid-cols-5 gap-4" style={{ minHeight: 0 }}>
+        <div className="col-span-1 flex flex-col gap-4 overflow-y-auto">
+          <div className="bg-zinc-50 border border-zinc-200 p-4">
+            <p className="text-xs text-zinc-400 mb-2">// description</p>
+            <p className="text-sm text-zinc-700 whitespace-pre-wrap">
+              {problem?.description || "No description"}
+            </p>
+          </div>
+
+          {problem?.examples && problem.examples.length > 0 && (
+            <div className="bg-zinc-50 border border-zinc-200 p-4">
+              <p className="text-xs text-zinc-400 mb-2">// examples</p>
+              <div className="text-sm text-zinc-700 space-y-2">
+                {problem.examples.map((ex, i) => (
+                  <p key={i} className="whitespace-pre-wrap">
+                    {ex}
+                  </p>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {problem?.constraints && problem.constraints.length > 0 && (
+            <div className="bg-zinc-50 border border-zinc-200 p-4">
+              <p className="text-xs text-zinc-400 mb-2">// constraints</p>
+              <ul className="text-sm text-zinc-700 list-disc list-inside">
+                {problem.constraints.map((c, i) => (
+                  <li key={i}>{c}</li>
+                ))}
+              </ul>
+            </div>
+          )}
+
+          <div className="border border-zinc-200 bg-white">
+            <div className="p-2 border-b border-zinc-100">
+              <span className="text-xs text-zinc-400">// ask llm</span>
+            </div>
+            <div className="p-2">
+              <textarea
+                value={llmQuestion}
+                onChange={(e) => setLlmQuestion(e.target.value)}
+                placeholder="Ask about the problem..."
+                className="w-full p-2 text-sm border border-zinc-200 resize-none focus:outline-none focus:border-zinc-400"
+                rows={2}
+              />
+              <button
+                onClick={handleAskLlm}
+                disabled={isAskingLlm || !llmQuestion.trim()}
+                className="mt-2 w-full py-1.5 text-sm bg-zinc-900 text-white hover:bg-zinc-700 disabled:opacity-50"
+              >
+                {isAskingLlm ? "..." : "ask"}
+              </button>
+              {llmAnswer && (
+                <div className="mt-2 p-2 bg-zinc-50 text-xs text-zinc-600 max-h-32 overflow-y-auto whitespace-pre-wrap">
+                  {llmAnswer.slice(0, 500)}
+                </div>
+              )}
+            </div>
+          </div>
+
+          <div className="border border-zinc-200 bg-white">
+            <div className="p-2 border-b border-zinc-100">
+              <span className="text-xs text-zinc-400">// my questions</span>
+            </div>
+            <div className="p-2">
+              <div className="flex gap-2 mb-2">
+                <input
+                  type="text"
+                  value={newQuestion}
+                  onChange={(e) => setNewQuestion(e.target.value)}
+                  onKeyDown={(e) => e.key === "Enter" && handleAddQuestion()}
+                  placeholder="Note a question..."
+                  className="flex-1 p-2 text-sm border border-zinc-200 focus:outline-none focus:border-zinc-400"
+                />
+                <button
+                  onClick={handleAddQuestion}
+                  className="px-3 text-sm bg-zinc-100 hover:bg-zinc-200 border border-zinc-200"
+                >
+                  +
+                </button>
+              </div>
+              {questions.length > 0 && (
+                <div className="space-y-1 max-h-32 overflow-y-auto">
+                  {questions.map((q) => (
+                    <div key={q.id} className="p-1.5 text-xs bg-zinc-50 text-zinc-600">
+                      {q.text}
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+
+        <div
+          className="col-span-2 border border-zinc-200 bg-white overflow-hidden"
+          style={{ height: "100%", minHeight: "400px" }}
+        >
+          <div style={{ height: "100%" }}>
             <Excalidraw
               initialData={excalidrawData || undefined}
-              excalidrawAPI={(api) => { excalidrawAPIRef.current = api; }}
+              excalidrawAPI={(api) => {
+                excalidrawAPIRef.current = api;
+              }}
               UIOptions={excalidrawOptions}
             />
           </div>
         </div>
 
-        <div className="flex flex-col gap-4">
+        <div className="col-span-2 flex flex-col gap-4">
           <div className="flex-1 flex flex-col min-h-0">
-            <label className="text-xs text-zinc-400 mb-2">// notes</label>
+            <label className="text-xs text-zinc-400 mb-2">// notes (shared)</label>
             <textarea
               value={notes}
               onChange={(e) => setNotes(e.target.value)}
-              placeholder="Write your approach, algorithm, key decisions..."
+              placeholder="Approach, algorithm, key decisions..."
               className="flex-1 p-3 border border-zinc-200 text-sm resize-none focus:outline-none focus:border-zinc-400"
             />
           </div>
 
-          <div className="flex flex-col max-h-48">
-            <label className="text-xs text-zinc-400 mb-2">// questions</label>
-            <div className="flex gap-2 mb-2">
-              <input
-                type="text"
-                value={newQuestion}
-                onChange={(e) => setNewQuestion(e.target.value)}
-                onKeyDown={(e) => e.key === "Enter" && handleAddQuestion()}
-                placeholder="Ask a question..."
-                className="flex-1 p-2 border border-zinc-200 text-sm focus:outline-none focus:border-zinc-400"
-              />
-              <button
-                onClick={handleAddQuestion}
-                className="px-3 text-sm bg-zinc-100 hover:bg-zinc-200 border border-zinc-200"
-              >
-                send
-              </button>
-            </div>
-            <div className="flex-1 space-y-2 overflow-y-auto">
-              {questions.map((q) => (
-                <div
-                  key={q.id}
-                  className="p-2 bg-zinc-50 border border-zinc-100 text-sm"
-                >
-                  <span className="text-zinc-500">Q:</span> {q.text}
-                  {q.answer && (
-                    <div className="mt-1 pl-2 text-zinc-600">
-                      <span className="text-zinc-400">A:</span> {q.answer}
-                    </div>
-                  )}
-                </div>
-              ))}
-            </div>
+          <div className="flex-1 flex flex-col min-h-0">
+            <label className="text-xs text-zinc-400 mb-2">// private notes</label>
+            <textarea
+              value={privateNotes}
+              onChange={(e) => setPrivateNotes(e.target.value)}
+              placeholder="Personal reminders, reminders to self..."
+              className="flex-1 p-3 border border-zinc-200 text-sm resize-none focus:outline-none focus:border-zinc-400 bg-zinc-50"
+            />
           </div>
         </div>
       </div>

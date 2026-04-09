@@ -2,7 +2,7 @@ const API_BASE = 'http://localhost:3001/api';
 
 export interface SessionConfig {
   problemType: string;
-  context: { domain: string; role: string; focusAreas: string[] };
+  context: { domain: string; focusAreas: string[] };
   spec: { difficulty: string; topics: string[]; constraints: string[]; timeLimit: number };
   evaluation: { allowedLanguages: string[]; priorities: string[]; criteria: { name: string; weight: number; description: string }[] };
 }

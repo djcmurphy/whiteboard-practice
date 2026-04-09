@@ -4,17 +4,11 @@ import path from 'path';
 import { fileURLToPath } from 'url';
 import fs from 'fs';
 import { createOpencode } from "@opencode-ai/sdk";
-import { z } from 'zod';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
-const ProblemSchema = z.object({
-  title: z.string().min(1).max(200),
-  description: z.string().min(1),
-  examples: z.array(z.string()).min(1),
-  constraints: z.array(z.string()).min(1),
-  hints: z.array(z.string()).optional(),
-});
+const SERVER_PORT = 3001;
+const LLM_ROOT = path.resolve(__dirname, '../../../llm');
 
 const ProblemJsonSchema = {
   type: 'object',
@@ -27,9 +21,6 @@ const ProblemJsonSchema = {
   },
   required: ['title', 'description', 'examples', 'constraints']
 };
-
-const SERVER_PORT = 3001;
-const LLM_ROOT = path.resolve(__dirname, '../../../llm');
 
 let client = null;
 let opencodeServer = null;
@@ -77,7 +68,9 @@ function getAllInstructions() {
   const systemDesign = readFile(path.join(LLM_ROOT, 'instructions/system-design.md'));
   const frontend = readFile(path.join(LLM_ROOT, 'instructions/frontend.md'));
   const backend = readFile(path.join(LLM_ROOT, 'instructions/backend.md'));
-  const behavioral = readFile(path.join(LLM_ROOT, 'instructions/behavioral.md'));
+  const fullstack = readFile(path.join(LLM_ROOT, 'instructions/fullstack.md'));
+  const mobile = readFile(path.join(LLM_ROOT, 'instructions/mobile.md'));
+  const devops = readFile(path.join(LLM_ROOT, 'instructions/devops.md'));
   
   return `${base}
 
@@ -93,12 +86,18 @@ ${frontend}
 --- BACKEND TYPE ---
 ${backend}
 
---- BEHAVIORAL TYPE ---
-${behavioral}
+--- FULLSTACK TYPE ---
+${fullstack}
+
+--- MOBILE TYPE ---
+${mobile}
+
+--- DEVOPS TYPE ---
+${devops}
 `;
 }
 
-async function runOpenCode(prompt) {
+async function runOpenCode(prompt, format = null) {
   try {
     if (!client) {
       return { error: 'OpenCode client not initialized' };
@@ -118,12 +117,21 @@ async function runOpenCode(prompt) {
     const result = await client.session.prompt({
       path: { id: sessionId },
       body: {
-        parts: [{ type: 'text', text: prompt }]
+        parts: [{ type: 'text', text: prompt }],
+        format: format
       }
     });
     
     console.log('[runOpenCode] Result keys:', Object.keys(result));
-    console.log('[runOpenCode] Result data:', JSON.stringify(result.data).slice(0, 800));
+    console.log('[runOpenCode] Result data keys:', result.data ? Object.keys(result.data) : 'no data');
+    console.log('[runOpenCode] Result info keys:', result.data?.info ? Object.keys(result.data.info) : 'no info');
+    console.log('[runOpenCode] Result data:', JSON.stringify(result.data).slice(0, 500));
+    
+    // If structured output was requested, return it directly
+    console.log('[runOpenCode] Structured:', JSON.stringify(result.data?.info?.structured).slice(0, 300));
+    if (format && result.data?.info?.structured) {
+      return { response: JSON.stringify(result.data.info.structured) };
+    }
     
     const parts = result.data?.info?.parts || result.data?.parts || [];
     const textParts = parts.filter(p => p.type === 'text');
@@ -220,39 +228,21 @@ const server = http.createServer(async (req, res) => {
     const config = JSON.parse(body);
     console.log('[generate] Config:', JSON.stringify(config));
 
-    const prompt = `Generate a ${config.spec.difficulty} ${config.problemType} problem suitable for a ${config.context.role} working in ${config.context.domain}.
+    const prompt = `Generate a ${config.spec.difficulty} ${config.problemType} problem suitable for ${config.context.domain} domain.
 
-Respond ONLY with valid JSON:
-{
-  "title": "problem title",
-  "description": "detailed problem description",
-  "examples": ["example 1", "example 2"],
-  "constraints": ["constraint 1", "constraint 2"],
-  "hints": ["hint 1", "hint 2"]
-}`;
+Respond ONLY with valid JSON matching this schema:
+${JSON.stringify(ProblemJsonSchema, null, 2)}`;
 
-    const result = await runOpenCode(prompt);
+    const result = await runOpenCode(prompt, { type: 'json_schema', schema: ProblemJsonSchema });
     console.log('[generate] Result:', JSON.stringify(result).slice(0, 500));
     
     let parsedResult = result;
     if (result.response) {
       try {
-        const jsonMatch = result.response.match(/\{[\s\S]*\}/);
-        if (jsonMatch) {
-          parsedResult = JSON.parse(jsonMatch[0]);
-        }
+        parsedResult = JSON.parse(result.response);
       } catch {
         parsedResult = { title: result.response.substring(0, 50), description: result.response };
       }
-    }
-    
-    // Validate with Zod
-    const validation = ProblemSchema.safeParse(parsedResult);
-    if (!validation.success) {
-      console.log('[generate] Validation failed:', validation.error.message);
-      res.writeHead(400);
-      res.end(JSON.stringify({ error: 'Invalid problem format', details: validation.error.message }));
-      return;
     }
     
     if (parsedResult.error) {

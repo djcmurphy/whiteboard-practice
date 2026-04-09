@@ -22,6 +22,7 @@ interface SessionStore {
   config: SessionConfig | null;
   problem: ProblemData | null;
   notes: string;
+  privateNotes: string;
   questions: Question[];
   excalidrawData: any;
   elapsedSeconds: number;
@@ -34,6 +35,7 @@ interface SessionStore {
   // Actions
   setSession: (sessionId: string, config: SessionConfig, problem: ProblemData) => void;
   setNotes: (notes: string) => void;
+  setPrivateNotes: (notes: string) => void;
   setExcalidrawData: (data: any) => void;
   addQuestion: (text: string) => void;
   setQuestionAnswer: (id: string, answer: string) => void;
@@ -49,6 +51,7 @@ const initialState = {
   config: null,
   problem: null,
   notes: '',
+  privateNotes: '',
   questions: [] as Question[],
   excalidrawData: null,
   elapsedSeconds: 0,
@@ -63,6 +66,8 @@ export const useSessionStore = create<SessionStore>((set) => ({
   setSession: (sessionId, config, problem) => set({ sessionId, config, problem }),
   
   setNotes: (notes) => set({ notes }),
+  
+  setPrivateNotes: (privateNotes) => set({ privateNotes }),
   
   setExcalidrawData: (data) => set({ excalidrawData: data }),
   

@@ -9,8 +9,7 @@ interface ConfigPanelProps {
 const defaultConfig = {
   problemType: 'dsa',
   context: {
-    domain: 'fintech',
-    role: 'fullstack',
+    domain: 'general',
     focusAreas: [] as string[],
   },
   spec: {
@@ -88,7 +87,9 @@ export function ConfigPanel({ onStart }: ConfigPanelProps) {
               <option value="system-design">system-design</option>
               <option value="frontend">frontend</option>
               <option value="backend">backend</option>
-              <option value="behavioral">behavioral</option>
+              <option value="fullstack">fullstack</option>
+              <option value="mobile">mobile</option>
+              <option value="devops">devops</option>
             </select>
           </div>
 
@@ -109,26 +110,18 @@ export function ConfigPanel({ onStart }: ConfigPanelProps) {
         <div className="grid grid-cols-2 gap-4">
           <div>
             <label className="block text-sm text-zinc-500 mb-1">domain</label>
-            <input
-              type="text"
+            <select
               value={formData.context.domain}
               onChange={(e) => setFormData({ ...formData, context: { ...formData.context, domain: e.target.value } })}
               className="w-full p-2 border border-zinc-300 bg-white text-sm focus:outline-none focus:border-zinc-500"
-            />
-          </div>
-
-          <div>
-            <label className="block text-sm text-zinc-500 mb-1">role</label>
-            <select
-              value={formData.context.role}
-              onChange={(e) => setFormData({ ...formData, context: { ...formData.context, role: e.target.value } })}
-              className="w-full p-2 border border-zinc-300 bg-white text-sm focus:outline-none focus:border-zinc-500"
             >
-              <option value="fullstack">fullstack</option>
-              <option value="frontend">frontend</option>
-              <option value="backend">backend</option>
-              <option value="devops">devops</option>
-              <option value="mobile">mobile</option>
+              <option value="general">general</option>
+              <option value="fintech">fintech</option>
+              <option value="healthcare">healthcare</option>
+              <option value="e-commerce">e-commerce</option>
+              <option value="saas">saas</option>
+              <option value="gaming">gaming</option>
+              <option value="social">social</option>
             </select>
           </div>
         </div>

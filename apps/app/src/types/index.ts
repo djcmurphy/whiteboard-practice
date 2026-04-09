@@ -1,6 +1,5 @@
 export interface SessionContext {
   domain: string;
-  role: string;
   focusAreas: string[];
 }
 
@@ -18,7 +17,7 @@ export interface EvaluationCriterion {
 }
 
 export interface SessionConfig {
-  problemType: 'dsa' | 'system-design' | 'frontend' | 'backend' | 'behavioral';
+  problemType: 'dsa' | 'system-design' | 'frontend' | 'backend' | 'fullstack' | 'mobile' | 'devops';
   context: SessionContext;
   spec: SessionSpec;
   evaluation: {
@@ -61,4 +60,12 @@ export interface Question {
   text: string;
   answer?: string;
   timestamp: number;
+}
+
+export interface ProblemData {
+  title: string;
+  description: string;
+  examples: string[];
+  constraints: string[];
+  hints: string[];
 }

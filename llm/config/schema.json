@@ -7,20 +7,17 @@
   "properties": {
     "problemType": {
       "type": "string",
-      "enum": ["dsa", "system-design", "frontend", "backend", "behavioral"],
+      "enum": ["dsa", "system-design", "frontend", "backend", "fullstack", "mobile", "devops"],
       "description": "The category of problem being practiced"
     },
     "context": {
       "type": "object",
-      "description": "Domain and role context for the session",
+      "description": "Domain and context for the session",
       "properties": {
         "domain": {
           "type": "string",
-          "examples": ["fintech", "healthcare", "e-commerce", "saas", "gaming", "general"]
-        },
-        "role": {
-          "type": "string",
-          "examples": ["fullstack", "frontend", "backend", "devops", "mobile"]
+          "enum": ["general", "fintech", "healthcare", "e-commerce", "saas", "gaming", "social"],
+          "description": "Industry domain for the problem"
         },
         "focusAreas": {
           "type": "array",
