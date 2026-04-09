@@ -1,0 +1,55 @@
+{
+  "problemType": "dsa",
+  "context": {
+    "domain": "fintech",
+    "role": "fullstack",
+    "focusAreas": []
+  },
+  "spec": {
+    "difficulty": "medium",
+    "topics": [],
+    "constraints": [],
+    "timeLimit": 30
+  },
+  "evaluation": {
+    "allowedLanguages": ["javascript", "python"],
+    "priorities": ["correctness", "communication", "time-complexity", "space-complexity"],
+    "criteria": [
+      {
+        "name": "problem-understanding",
+        "weight": 1,
+        "description": "Correctly understood the problem requirements"
+      },
+      {
+        "name": "approach-clarity",
+        "weight": 1,
+        "description": "Clearly explained the approach before coding"
+      },
+      {
+        "name": "code-correctness",
+        "weight": 2,
+        "description": "Code compiles and produces correct output"
+      },
+      {
+        "name": "time-complexity",
+        "weight": 1,
+        "description": "Achieved optimal or near-optimal time complexity"
+      },
+      {
+        "name": "space-complexity",
+        "weight": 0.5,
+        "description": "Achieved optimal or near-optimal space complexity"
+      },
+      {
+        "name": "communication",
+        "weight": 1,
+        "description": "Explained thoughts clearly throughout"
+      },
+      {
+        "name": "edge-cases",
+        "weight": 0.5,
+        "description": "Considered and handled edge cases"
+      }
+    ]
+  }
+}

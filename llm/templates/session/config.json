@@ -1,0 +1,19 @@
+{
+  "problemType": "dsa",
+  "context": {
+    "domain": "",
+    "role": "fullstack",
+    "focusAreas": []
+  },
+  "spec": {
+    "difficulty": "medium",
+    "topics": [],
+    "constraints": [],
+    "timeLimit": 30
+  },
+  "evaluation": {
+    "allowedLanguages": [],
+    "priorities": [],
+    "criteria": []
+  }
+}

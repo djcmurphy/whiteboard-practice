@@ -1,0 +1,69 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "Whiteboard Session Evaluation Result",
+  "description": "Schema for evaluation results returned by the LLM",
+  "type": "object",
+  "required": ["scores", "overallScore", "strengths", "improvements"],
+  "properties": {
+    "scores": {
+      "type": "object",
+      "description": "Individual criterion scores",
+      "additionalProperties": {
+        "type": "object",
+        "properties": {
+          "score": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 5
+          },
+          "maxScore": {
+            "type": "integer",
+            "default": 5
+          },
+          "feedback": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "overallScore": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 100,
+      "description": "Weighted overall score"
+    },
+    "grade": {
+      "type": "string",
+      "enum": ["excellent", "good", "needs-improvement", "poor"],
+      "description": "Letter grade equivalent"
+    },
+    "strengths": {
+      "type": "array",
+      "items": { "type": "string" },
+      "description": "List of strengths demonstrated"
+    },
+    "improvements": {
+      "type": "array",
+      "items": { "type": "string" },
+      "description": "Areas that need improvement"
+    },
+    "suggestions": {
+      "type": "array",
+      "items": { "type": "string" },
+      "description": "Specific actionable recommendations"
+    },
+    "followUpQuestions": {
+      "type": "array",
+      "items": { "type": "string" },
+      "description": "Questions to probe deeper understanding"
+    },
+    "timeTaken": {
+      "type": "number",
+      "description": "Time actually taken in minutes"
+    },
+    "timestamp": {
+      "type": "string",
+      "format": "date-time"
+    }
+  }
+}
