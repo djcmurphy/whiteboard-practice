@@ -4,8 +4,29 @@ import path from 'path';
 import { fileURLToPath } from 'url';
 import fs from 'fs';
 import { createOpencode } from "@opencode-ai/sdk";
+import { z } from 'zod';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
+
+const ProblemSchema = z.object({
+  title: z.string().min(1).max(200),
+  description: z.string().min(1),
+  examples: z.array(z.string()).min(1),
+  constraints: z.array(z.string()).min(1),
+  hints: z.array(z.string()).optional(),
+});
+
+const ProblemJsonSchema = {
+  type: 'object',
+  properties: {
+    title: { type: 'string', description: 'Problem title' },
+    description: { type: 'string', description: 'Detailed problem description' },
+    examples: { type: 'array', items: { type: 'string' }, description: 'Examples of the problem' },
+    constraints: { type: 'array', items: { type: 'string' }, description: 'Problem constraints' },
+    hints: { type: 'array', items: { type: 'string' }, description: 'Hints for solving' }
+  },
+  required: ['title', 'description', 'examples', 'constraints']
+};
 
 const SERVER_PORT = 3001;
 const LLM_ROOT = path.resolve(__dirname, '../../../llm');
@@ -211,15 +232,27 @@ Respond ONLY with valid JSON:
 }`;
 
     const result = await runOpenCode(prompt);
-    console.log('[generate] Result:', JSON.stringify(result).slice(0, 200));
+    console.log('[generate] Result:', JSON.stringify(result).slice(0, 500));
     
     let parsedResult = result;
     if (result.response) {
       try {
-        parsedResult = JSON.parse(result.response);
+        const jsonMatch = result.response.match(/\{[\s\S]*\}/);
+        if (jsonMatch) {
+          parsedResult = JSON.parse(jsonMatch[0]);
+        }
       } catch {
         parsedResult = { title: result.response.substring(0, 50), description: result.response };
       }
+    }
+    
+    // Validate with Zod
+    const validation = ProblemSchema.safeParse(parsedResult);
+    if (!validation.success) {
+      console.log('[generate] Validation failed:', validation.error.message);
+      res.writeHead(400);
+      res.end(JSON.stringify({ error: 'Invalid problem format', details: validation.error.message }));
+      return;
     }
     
     if (parsedResult.error) {
