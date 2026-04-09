@@ -39,21 +39,25 @@ export function ConfigPanel({ onStart }: ConfigPanelProps) {
   const [error, setError] = useState('');
 
   const handleGenerate = async () => {
+    console.log('[ConfigPanel] Starting generate...');
     setIsGenerating(true);
     setError('');
     setIsLoading(true);
 
     try {
+      console.log('[ConfigPanel] Calling API with config:', formData);
       const result = await api.generateProblem(formData as any);
+      console.log('[ConfigPanel] API result:', result);
       
-      if (result.error) {
-        setError(result.error);
+      if ('error' in result) {
+        setError(String(result.error));
         return;
       }
 
-      setSession(result.sessionId, result.config, result.problem);
+      setSession(result.sessionId, result.config as any, result.problem);
       onStart();
     } catch (err) {
+      console.error('[ConfigPanel] Error:', err);
       setError(String(err));
     } finally {
       setIsGenerating(false);

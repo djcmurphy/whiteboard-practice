@@ -1,6 +1,4 @@
 import { useSessionStore } from '../stores/sessionStore';
-import { useEffect, useState } from 'react';
-import { api, type SessionListItem } from '../lib/api';
 
 interface ResultsPageProps {
   onHome: () => void;

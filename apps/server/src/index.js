@@ -1,19 +1,20 @@
 import http from 'http';
-import { spawn } from 'child_process';
-import { exec as execSync } from 'child_process';
-import { promisify } from 'util';
 import Database from 'better-sqlite3';
 import path from 'path';
 import { fileURLToPath } from 'url';
+import fs from 'fs';
+import { createOpencode } from "@opencode-ai/sdk";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const exec = promisify(execSync);
 
-const OPENCODE_PORT = 4096;
-const OPENCODE_HOST = 'localhost';
 const SERVER_PORT = 3001;
+const LLM_ROOT = path.resolve(__dirname, '../../../llm');
 
-// Database setup
+let client = null;
+let opencodeServer = null;
+let llmContextLoaded = false;
+let opencodeSessionId = null;
+
 const db = new Database(path.join(__dirname, '../data.db'));
 db.pragma('journal_mode = WAL');
 
@@ -45,42 +46,88 @@ db.exec(`
   );
 `);
 
-let opencodeServerRunning = false;
-
-async function checkOpenCode() {
-  try {
-    await exec('opencode --version');
-    return true;
-  } catch {
-    return false;
-  }
+function readFile(filePath) {
+  return fs.readFileSync(filePath, 'utf-8');
 }
 
-async function startOpenCodeServer() {
-  if (opencodeServerRunning) return;
+function getAllInstructions() {
+  const base = readFile(path.join(LLM_ROOT, 'instructions/base.md'));
+  const dsa = readFile(path.join(LLM_ROOT, 'instructions/dsa.md'));
+  const systemDesign = readFile(path.join(LLM_ROOT, 'instructions/system-design.md'));
+  const frontend = readFile(path.join(LLM_ROOT, 'instructions/frontend.md'));
+  const backend = readFile(path.join(LLM_ROOT, 'instructions/backend.md'));
+  const behavioral = readFile(path.join(LLM_ROOT, 'instructions/behavioral.md'));
   
-  const proc = spawn('opencode', ['serve', '--port', String(OPENCODE_PORT), '--hostname', OPENCODE_HOST], {
-    detached: true,
-    stdio: 'ignore'
-  });
-  proc.unref();
-  
-  await new Promise(r => setTimeout(r, 2000));
-  opencodeServerRunning = true;
-  console.log(`OpenCode server started on ${OPENCODE_HOST}:${OPENCODE_PORT}`);
+  return `${base}
+
+--- DSA TYPE ---
+${dsa}
+
+--- SYSTEM DESIGN TYPE ---
+${systemDesign}
+
+--- FRONTEND TYPE ---
+${frontend}
+
+--- BACKEND TYPE ---
+${backend}
+
+--- BEHAVIORAL TYPE ---
+${behavioral}
+`;
 }
 
 async function runOpenCode(prompt) {
-  const args = ['run', '--attach', `http://${OPENCODE_HOST}:${OPENCODE_PORT}`, '--format', 'json', '--', prompt];
-  
-  const { stdout } = await exec(`opencode ${args.join(' ')}`, { timeout: 180000 });
-  
   try {
-    const jsonMatch = stdout.match(/\{[\s\S]*\}/);
-    return jsonMatch ? JSON.parse(jsonMatch[0]) : JSON.parse(stdout);
-  } catch {
-    return { error: 'Failed to parse response', raw: stdout };
+    if (!client) {
+      return { error: 'OpenCode client not initialized' };
+    }
+
+    let sessionId = opencodeSessionId;
+    
+    if (!sessionId) {
+      const createResult = await client.session.create({
+        body: { title: 'Whiteboard Practice Session' }
+      });
+      sessionId = createResult.data.id;
+      opencodeSessionId = sessionId;
+      console.log('[runOpenCode] Created session:', sessionId);
+    }
+    
+    const result = await client.session.prompt({
+      path: { id: sessionId },
+      body: {
+        parts: [{ type: 'text', text: prompt }]
+      }
+    });
+    
+    console.log('[runOpenCode] Result keys:', Object.keys(result));
+    console.log('[runOpenCode] Result data:', JSON.stringify(result.data).slice(0, 800));
+    
+    const parts = result.data?.info?.parts || result.data?.parts || [];
+    const textParts = parts.filter(p => p.type === 'text');
+    const text = textParts.map(p => p.text || '').join('');
+    return { response: text };
+  } catch (error) {
+    console.log('[runOpenCode] Error:', error.message);
+    return { error: error.message };
   }
+}
+
+async function loadLlmContext() {
+  if (llmContextLoaded) return;
+  
+  const instructions = getAllInstructions();
+  const initPrompt = `You are an expert technical interview question generator and evaluator. Read and understand these instructions thoroughly. After this, I will send you specific parameters and you will generate problems or evaluate solutions based on these instructions.
+
+${instructions}
+
+Reply with "UNDERSTOOD" if you have read and understood all instructions.`;
+
+  console.log('[loadLlmContext] Loading instructions into LLM...');
+  await runOpenCode(initPrompt);
+  llmContextLoaded = true;
+  console.log('[loadLlmContext] LLM context loaded');
 }
 
 function generateId() {
@@ -94,6 +141,8 @@ const server = http.createServer(async (req, res) => {
   res.setHeader('Access-Control-Allow-Origin', '*');
   
   if (req.method === 'OPTIONS') {
+    res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, OPTIONS');
+    res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
     res.writeHead(204);
     res.end();
     return;
@@ -106,34 +155,53 @@ const server = http.createServer(async (req, res) => {
     return;
   }
 
-  // Check OpenCode installed
+  // Check OpenCode connection
   if (url.pathname === '/api/check' && req.method === 'POST') {
-    const installed = await checkOpenCode();
-    res.writeHead(200);
-    res.end(JSON.stringify({ installed }));
+    try {
+      if (client) {
+        await client.global.health();
+        res.writeHead(200);
+        res.end(JSON.stringify({ installed: true }));
+      } else {
+        res.writeHead(200);
+        res.end(JSON.stringify({ installed: false }));
+      }
+    } catch {
+      res.writeHead(200);
+      res.end(JSON.stringify({ installed: false }));
+    }
     return;
   }
 
-  // Start OpenCode server
-  if (url.pathname === '/api/start' && req.method === 'POST') {
-    await startOpenCodeServer();
+  // Test prompt endpoint
+  if (url.pathname === '/api/test' && req.method === 'POST') {
+    let body = '';
+    for await (const chunk of req) {
+      body += chunk;
+    }
+    const { prompt } = JSON.parse(body);
+    const result = await runOpenCode(prompt);
     res.writeHead(200);
-    res.end(JSON.stringify({ success: true }));
+    res.end(JSON.stringify(result));
     return;
   }
 
   // Generate problem from config
   if (url.pathname === '/api/generate' && req.method === 'POST') {
+    console.log('[generate] Received request');
+    await loadLlmContext();
+    
     let body = '';
     for await (const chunk of req) {
       body += chunk;
     }
     
     const config = JSON.parse(body);
-    
-    const prompt = `Generate a ${config.spec.difficulty} ${config.problemType} problem for a ${config.context.role} role in the ${config.context.domain} domain.
+    console.log('[generate] Config:', JSON.stringify(config));
 
-Respond ONLY with valid JSON in this format:
+    const prompt = `Generate a ${config.spec.difficulty} ${config.problemType} problem suitable for a ${config.context.role} working in ${config.context.domain}.
+
+Respond ONLY with valid JSON:
 {
   "title": "problem title",
   "description": "detailed problem description",
@@ -143,32 +211,41 @@ Respond ONLY with valid JSON in this format:
 }`;
 
     const result = await runOpenCode(prompt);
+    console.log('[generate] Result:', JSON.stringify(result).slice(0, 200));
     
-    if (result.error) {
+    let parsedResult = result;
+    if (result.response) {
+      try {
+        parsedResult = JSON.parse(result.response);
+      } catch {
+        parsedResult = { title: result.response.substring(0, 50), description: result.response };
+      }
+    }
+    
+    if (parsedResult.error) {
       res.writeHead(500);
-      res.end(JSON.stringify({ error: result.error }));
+      res.end(JSON.stringify({ error: parsedResult.error }));
       return;
     }
 
-    // Save to database
     const sessionId = generateId();
     const stmt = db.prepare(`
       INSERT INTO sessions (id, config, problem, status)
       VALUES (?, ?, ?, 'generated')
     `);
     
-    stmt.run(sessionId, JSON.stringify(config), JSON.stringify(result));
+    stmt.run(sessionId, JSON.stringify(config), JSON.stringify(parsedResult));
     
     res.writeHead(200);
     res.end(JSON.stringify({ 
       sessionId, 
-      problem: result,
+      problem: parsedResult,
       config 
     }));
     return;
   }
 
-  // Save session (notes, questions, excalidraw data)
+  // Save session
   if (url.pathname === '/api/sessions' && req.method === 'PUT') {
     let body = '';
     for await (const chunk of req) {
@@ -190,10 +267,9 @@ Respond ONLY with valid JSON in this format:
     return;
   }
 
-  // Get session by ID
+  // Get session
   if (url.pathname.startsWith('/api/sessions/') && req.method === 'GET') {
     const sessionId = url.pathname.split('/').pop();
-    
     const stmt = db.prepare('SELECT * FROM sessions WHERE id = ?');
     const session = stmt.get(sessionId);
     
@@ -215,7 +291,7 @@ Respond ONLY with valid JSON in this format:
     return;
   }
 
-  // List all sessions
+  // List sessions
   if (url.pathname === '/api/sessions' && req.method === 'GET') {
     const stmt = db.prepare('SELECT id, config, problem, status, created_at, updated_at FROM sessions ORDER BY updated_at DESC');
     const sessions = stmt.all();
@@ -231,7 +307,7 @@ Respond ONLY with valid JSON in this format:
     return;
   }
 
-  // Evaluate session
+  // Evaluate
   if (url.pathname === '/api/evaluate' && req.method === 'POST') {
     let body = '';
     for await (const chunk of req) {
@@ -240,7 +316,7 @@ Respond ONLY with valid JSON in this format:
     
     const { sessionId, notes, questions, config, problem } = JSON.parse(body);
     
-    const prompt = `You are evaluating a ${config.spec.difficulty} ${config.problemType} problem in the ${config.context.domain} domain for a ${config.context.role} role.
+    const prompt = `Evaluate this whiteboard session.
 
 ## Problem
 ${problem?.title || 'N/A'}
@@ -255,26 +331,37 @@ ${questions?.map(q => `- ${q.text}`).join('\n') || 'None'}
 ## Evaluation Criteria
 ${config.evaluation.criteria.map(c => `- ${c.name}: ${c.description}`).join('\n')}
 
-Your task: Evaluate the candidate's solution. Respond ONLY with valid JSON:
+Respond ONLY with valid JSON:
 {
   "scores": { "criterion-name": { "score": 1-5, "maxScore": 5, "feedback": "..." } },
   "overallScore": 0-100,
   "grade": "excellent|good|needs-improvement|poor",
   "strengths": ["..."],
   "improvements": ["..."],
-  "suggestions": ["..."],
-  "followUpQuestions": ["..."]
+  "suggestions": ["..."]
 }`;
 
     const result = await runOpenCode(prompt);
+    console.log('[evaluate] Result:', JSON.stringify(result).slice(0, 200));
     
-    if (result.error) {
+    let parsedResult = result;
+    if (result.response) {
+      try {
+        const jsonMatch = result.response.match(/\{[\s\S]*\}/);
+        if (jsonMatch) {
+          parsedResult = JSON.parse(jsonMatch[0]);
+        }
+      } catch {
+        parsedResult = { error: 'Failed to parse response' };
+      }
+    }
+    
+    if (parsedResult.error) {
       res.writeHead(500);
-      res.end(JSON.stringify({ error: result.error }));
+      res.end(JSON.stringify({ error: parsedResult.error }));
       return;
     }
 
-    // Save evaluation
     const evalId = generateId();
     const evalStmt = db.prepare(`
       INSERT INTO evaluations (id, session_id, scores, overall_score, grade, strengths, improvements, suggestions, follow_up_questions)
@@ -284,21 +371,20 @@ Your task: Evaluate the candidate's solution. Respond ONLY with valid JSON:
     evalStmt.run(
       evalId,
       sessionId,
-      JSON.stringify(result.scores),
-      result.overallScore,
-      result.grade,
-      JSON.stringify(result.strengths),
-      JSON.stringify(result.improvements),
-      JSON.stringify(result.suggestions),
-      JSON.stringify(result.followUpQuestions || [])
+      JSON.stringify(parsedResult.scores || {}),
+      parsedResult.overallScore || 0,
+      parsedResult.grade || 'needs-improvement',
+      JSON.stringify(parsedResult.strengths || []),
+      JSON.stringify(parsedResult.improvements || []),
+      JSON.stringify(parsedResult.suggestions || []),
+      JSON.stringify(parsedResult.followUpQuestions || [])
     );
 
-    // Update session status
     const updateStmt = db.prepare("UPDATE sessions SET status = 'completed', updated_at = CURRENT_TIMESTAMP WHERE id = ?");
     updateStmt.run(sessionId);
 
     res.writeHead(200);
-    res.end(JSON.stringify(result));
+    res.end(JSON.stringify(parsedResult));
     return;
   }
 
@@ -306,6 +392,20 @@ Your task: Evaluate the candidate's solution. Respond ONLY with valid JSON:
   res.end(JSON.stringify({ error: 'Not found' }));
 });
 
-server.listen(SERVER_PORT, () => {
+server.listen(SERVER_PORT, async () => {
   console.log(`API server running on http://localhost:${SERVER_PORT}`);
+  console.log(`LLM instructions loaded from: ${LLM_ROOT}`);
+  
+  try {
+    console.log('[init] Starting OpenCode...');
+    const opencode = await createOpencode();
+    client = opencode.client;
+    opencodeServer = opencode.server;
+    console.log('[init] OpenCode started at', opencode.server.url);
+    
+    await loadLlmContext();
+    console.log('[init] LLM ready');
+  } catch (err) {
+    console.log('[init] Failed to start OpenCode:', err.message);
+  }
 });

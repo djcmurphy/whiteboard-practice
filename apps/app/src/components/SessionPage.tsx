@@ -2,7 +2,6 @@ import { useEffect, useState, useCallback } from 'react';
 import { useSessionStore } from '../stores/sessionStore';
 import { api } from '../lib/api';
 import { Excalidraw } from '@excalidraw/excalidraw';
-import type { ExcalidrawElement } from '@excalidraw/excalidraw';
 
 interface SessionPageProps {
   onFinish: () => void;
@@ -29,7 +28,7 @@ export function SessionPage({ onFinish }: SessionPageProps) {
 
   const [newQuestion, setNewQuestion] = useState('');
   const [isEvaluating, setIsEvaluating] = useState(false);
-  const [elements, setElements] = useState<ExcalidrawElement[]>(excalidrawData?.elements || []);
+  const [elements, setElements] = useState<any[]>(excalidrawData?.elements || []);
 
   const timeLimit = config?.spec.timeLimit || 30;
   const remainingSeconds = timeLimit * 60 - elapsedSeconds;
@@ -103,9 +102,9 @@ export function SessionPage({ onFinish }: SessionPageProps) {
     }
   };
 
-  const handleElementsChange = (newElements: ExcalidrawElement[]) => {
-    setElements(newElements);
-    setExcalidrawData({ elements: newElements });
+  const handleElementsChange = (newElements: readonly any[]) => {
+    setElements(newElements as any[]);
+    setExcalidrawData({ elements: newElements as any[] });
   };
 
   return (
@@ -140,7 +139,7 @@ export function SessionPage({ onFinish }: SessionPageProps) {
       </div>
 
       {/* Main content */}
-      <div className="flex-1 grid grid-cols-3 gap-4">
+      <div className="flex-1 grid grid-cols-4 gap-4">
         {/* Excalidraw Whiteboard */}
         <div className="col-span-2 border border-zinc-200 bg-white overflow-hidden">
           <Excalidraw
@@ -202,7 +201,66 @@ export function SessionPage({ onFinish }: SessionPageProps) {
             </div>
           </div>
         </div>
+
+        {/* Prompt Test Panel */}
+        <div className="border border-zinc-200 bg-white">
+          <div className="p-2 border-b border-zinc-200 bg-zinc-50">
+            <span className="text-xs text-zinc-500">// test prompt</span>
+          </div>
+          <PromptTestPanel />
+        </div>
       </div>
+    </div>
+  );
+}
+
+function PromptTestPanel() {
+  const [prompt, setPrompt] = useState('');
+  const [response, setResponse] = useState('');
+  const [isLoading, setIsLoading] = useState(false);
+
+  const handleTest = async () => {
+    if (!prompt.trim()) return;
+    setIsLoading(true);
+    setResponse('...');
+    
+    try {
+      const res = await fetch('http://localhost:3001/api/test', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ prompt })
+      });
+      const data = await res.json();
+      setResponse(data.response || JSON.stringify(data, null, 2));
+    } catch (err) {
+      setResponse('Error: ' + String(err));
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  return (
+    <div className="flex flex-col h-full">
+      <textarea
+        value={prompt}
+        onChange={(e) => setPrompt(e.target.value)}
+        placeholder="Test prompt..."
+        className="flex-1 p-2 text-xs resize-none border-none focus:outline-none"
+      />
+      <div className="p-2 border-t border-zinc-100">
+        <button
+          onClick={handleTest}
+          disabled={isLoading}
+          className="w-full py-1 text-xs bg-zinc-900 text-white hover:bg-zinc-700 disabled:opacity-50"
+        >
+          {isLoading ? '...' : 'test'}
+        </button>
+      </div>
+      {response && (
+        <div className="p-2 border-t border-zinc-100 bg-zinc-50 max-h-32 overflow-auto">
+          <pre className="text-xs text-zinc-600 whitespace-pre-wrap">{response.slice(0, 500)}</pre>
+        </div>
+      )}
     </div>
   );
 }
