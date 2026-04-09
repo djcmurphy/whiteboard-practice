@@ -1,11 +1,13 @@
 import { useSessionStore } from '../stores/sessionStore';
+import { useEffect, useState } from 'react';
+import { api, type SessionListItem } from '../lib/api';
 
 interface ResultsPageProps {
   onHome: () => void;
 }
 
 export function ResultsPage({ onHome }: ResultsPageProps) {
-  const { evaluationResult, config, reset } = useSessionStore();
+  const { evaluationResult, config, problem, reset } = useSessionStore();
 
   const handleNewSession = () => {
     reset();
@@ -37,6 +39,15 @@ export function ResultsPage({ onHome }: ResultsPageProps) {
 
   return (
     <div className="max-w-2xl mx-auto">
+      {/* Problem summary */}
+      {problem && (
+        <div className="mb-6 p-4 bg-zinc-50 border border-zinc-200">
+          <p className="text-xs text-zinc-400 mb-1">// problem</p>
+          <p className="font-medium text-zinc-800">{problem.title}</p>
+          <p className="text-sm text-zinc-500 mt-1">{problem.description}</p>
+        </div>
+      )}
+
       <div className="flex items-center justify-between mb-8 pb-4 border-b border-zinc-200">
         <h2 className="text-xl font-light text-zinc-800">// results</h2>
         <div className="flex items-center gap-4">
@@ -77,7 +88,6 @@ export function ResultsPage({ onHome }: ResultsPageProps) {
 
       {/* Feedback sections */}
       <div className="grid grid-cols-2 gap-6 mb-8">
-        {/* Strengths */}
         <div className="p-4 bg-green-50 border border-green-100">
           <h3 className="text-sm font-medium text-green-800 mb-3">// strengths</h3>
           <ul className="space-y-2">
@@ -87,7 +97,6 @@ export function ResultsPage({ onHome }: ResultsPageProps) {
           </ul>
         </div>
 
-        {/* Improvements */}
         <div className="p-4 bg-red-50 border border-red-100">
           <h3 className="text-sm font-medium text-red-800 mb-3">// improvements</h3>
           <ul className="space-y-2">
@@ -98,7 +107,6 @@ export function ResultsPage({ onHome }: ResultsPageProps) {
         </div>
       </div>
 
-      {/* Suggestions */}
       {suggestions.length > 0 && (
         <div className="mb-8 p-4 bg-zinc-50 border border-zinc-200">
           <h3 className="text-sm font-medium text-zinc-700 mb-3">// suggestions</h3>
@@ -110,7 +118,6 @@ export function ResultsPage({ onHome }: ResultsPageProps) {
         </div>
       )}
 
-      {/* Follow-up questions */}
       {followUpQuestions && followUpQuestions.length > 0 && (
         <div className="mb-8 p-4 bg-blue-50 border border-blue-100">
           <h3 className="text-sm font-medium text-blue-800 mb-3">// follow-up questions</h3>
@@ -122,7 +129,6 @@ export function ResultsPage({ onHome }: ResultsPageProps) {
         </div>
       )}
 
-      {/* Actions */}
       <div className="flex justify-center">
         <button
           onClick={handleNewSession}

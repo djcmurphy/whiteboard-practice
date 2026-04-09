@@ -1,22 +1,42 @@
 import { create } from 'zustand';
-import type { SessionConfig, EvaluationResult, Question } from '../types';
+import type { SessionConfig, EvaluationResult } from '../types';
+
+interface Question {
+  id: string;
+  text: string;
+  answer?: string;
+  timestamp: number;
+}
+
+interface ProblemData {
+  title: string;
+  description: string;
+  examples: string[];
+  constraints: string[];
+  hints: string[];
+}
 
 interface SessionStore {
+  // Current session
+  sessionId: string | null;
   config: SessionConfig | null;
-  problem: string;
+  problem: ProblemData | null;
   notes: string;
   questions: Question[];
+  excalidrawData: any;
   elapsedSeconds: number;
   isPaused: boolean;
+  
+  // UI state
   isLoading: boolean;
   evaluationResult: EvaluationResult | null;
   
-  setConfig: (config: SessionConfig) => void;
-  setProblem: (problem: string) => void;
+  // Actions
+  setSession: (sessionId: string, config: SessionConfig, problem: ProblemData) => void;
   setNotes: (notes: string) => void;
+  setExcalidrawData: (data: any) => void;
   addQuestion: (text: string) => void;
   setQuestionAnswer: (id: string, answer: string) => void;
-  setElapsedSeconds: (seconds: number) => void;
   incrementElapsed: () => void;
   setIsPaused: (paused: boolean) => void;
   setIsLoading: (loading: boolean) => void;
@@ -25,10 +45,12 @@ interface SessionStore {
 }
 
 const initialState = {
+  sessionId: null,
   config: null,
-  problem: '',
+  problem: null,
   notes: '',
   questions: [] as Question[],
+  excalidrawData: null,
   elapsedSeconds: 0,
   isPaused: false,
   isLoading: false,
@@ -38,24 +60,20 @@ const initialState = {
 export const useSessionStore = create<SessionStore>((set) => ({
   ...initialState,
 
-  setConfig: (config) => set({ config }),
-  setProblem: (problem) => set({ problem }),
+  setSession: (sessionId, config, problem) => set({ sessionId, config, problem }),
+  
   setNotes: (notes) => set({ notes }),
   
+  setExcalidrawData: (data) => set({ excalidrawData: data }),
+  
   addQuestion: (text) => set((state) => ({
-    questions: [
-      ...state.questions,
-      { id: crypto.randomUUID(), text, timestamp: Date.now() }
-    ]
+    questions: [...state.questions, { id: crypto.randomUUID(), text, timestamp: Date.now() }]
   })),
   
   setQuestionAnswer: (id, answer) => set((state) => ({
-    questions: state.questions.map(q => 
-      q.id === id ? { ...q, answer } : q
-    )
+    questions: state.questions.map(q => q.id === id ? { ...q, answer } : q)
   })),
   
-  setElapsedSeconds: (seconds) => set({ elapsedSeconds: seconds }),
   incrementElapsed: () => set((state) => ({ elapsedSeconds: state.elapsedSeconds + 1 })),
   setIsPaused: (paused) => set({ isPaused: paused }),
   setIsLoading: (loading) => set({ isLoading: loading }),
