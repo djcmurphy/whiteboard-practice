@@ -66,8 +66,8 @@ export const api = {
   
   getSession: (id: string) => request<Session>(`/sessions/${id}`, 'GET'),
   
-  saveSession: (sessionId: string, notes: string, questions: any[], excalidrawData: any) => 
-    request<{ success: boolean }>('/sessions', 'PUT', { sessionId, notes, questions, excalidrawData }),
+  saveSession: (sessionId: string, notes: string, questions: any[], excalidrawData: any, elapsedSeconds: number = 0, isPaused: boolean = false) => 
+    request<{ success: boolean }>('/sessions', 'PUT', { sessionId, notes, questions, excalidrawData, elapsedSeconds, isPaused }),
   
   evaluate: (sessionId: string, notes: string, questions: any[], config: SessionConfig, problem: ProblemData) => 
     request<EvaluateResponse>('/evaluate', 'POST', { sessionId, notes, questions, config, problem }),

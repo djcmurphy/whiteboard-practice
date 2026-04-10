@@ -33,6 +33,19 @@ interface SessionState {
 
 interface SessionActions {
   startSession: (sessionId: string, config: SessionConfig, problem: ProblemData) => void;
+  loadSession: (sessionData: {
+    sessionId: string;
+    config: SessionConfig;
+    problem: ProblemData;
+    notes: string;
+    privateNotes: string;
+    questions: Question[];
+    excalidrawData: any;
+    elapsedSeconds: number;
+    isPaused: boolean;
+    showExamples: boolean;
+    showConstraints: boolean;
+  }) => void;
   updateSession: (updates: Partial<Pick<SessionState, 'notes' | 'privateNotes' | 'excalidrawData'>>) => void;
   addQuestion: (text: string) => string;
   updateQuestion: (id: string, updates: Partial<Pick<Question, 'text' | 'answer'>>) => void;
@@ -60,18 +73,29 @@ const initialState: SessionState = {
 export const useSessionStore = create<SessionState & SessionActions>((set, get) => ({
   ...initialState,
 
-  startSession: (sessionId, config, problem) => set({
-    sessionId,
-    config,
-    problem,
-    elapsedSeconds: 0,
-    isPaused: false,
-    notes: '',
-    privateNotes: '',
-    questions: [],
-    excalidrawData: null,
-    evaluationResult: null,
-  }),
+  startSession: (sessionId, config, problem) => {
+    localStorage.setItem('lastSessionId', sessionId);
+    set({
+      sessionId,
+      config,
+      problem,
+      elapsedSeconds: 0,
+      isPaused: false,
+      notes: '',
+      privateNotes: '',
+      questions: [],
+      excalidrawData: null,
+      evaluationResult: null,
+    });
+  },
+
+  loadSession: (sessionData) => {
+    localStorage.setItem('lastSessionId', sessionData.sessionId);
+    set({
+      ...sessionData,
+      evaluationResult: null,
+    });
+  },
 
   updateSession: (updates) => set((state) => ({ ...state, ...updates })),
 

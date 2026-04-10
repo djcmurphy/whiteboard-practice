@@ -38,6 +38,8 @@ db.exec(`
     notes TEXT,
     questions TEXT,
     excalidraw_data TEXT,
+    elapsed_seconds INTEGER DEFAULT 0,
+    is_paused INTEGER DEFAULT 0,
     status TEXT DEFAULT 'generated',
     created_at TEXT DEFAULT CURRENT_TIMESTAMP,
     updated_at TEXT DEFAULT CURRENT_TIMESTAMP
@@ -142,12 +144,37 @@ async function runOpenCode(prompt, format = null) {
     console.log('[runOpenCode] Result info keys:', result.data?.info ? Object.keys(result.data.info) : 'no info');
     console.log('[runOpenCode] Result data:', result.data ? JSON.stringify(result.data).slice(0, 500) : 'no data');
     
-    // If structured output was requested, return it directly
-    console.log('[runOpenCode] Structured:', result.data?.info?.structured ? JSON.stringify(result.data.info.structured).slice(0, 300) : 'no structured');
-    if (format && result.data?.info?.structured) {
-      return { response: JSON.stringify(result.data.info.structured) };
+    // If structured output was requested, try to extract JSON
+    if (format) {
+      // First try direct structured output
+      if (result.data?.info?.structured) {
+        console.log('[runOpenCode] Using structured output');
+        return { response: JSON.stringify(result.data.info.structured) };
+      }
+      
+      // Fall back: extract JSON from markdown code blocks
+      const parts = result.data?.info?.parts || result.data?.parts || [];
+      const textParts = parts.filter(p => p.type === 'text');
+      const rawText = textParts.map(p => p.text || '').join('');
+      
+      // Try to find JSON in code blocks
+      const jsonMatch = rawText.match(/```json\s*([\s\S]*?)\s*```/);
+      if (jsonMatch) {
+        try {
+          const parsed = JSON.parse(jsonMatch[1]);
+          console.log('[runOpenCode] Extracted JSON from markdown');
+          return { response: JSON.stringify(parsed) };
+        } catch (e) {
+          console.log('[runOpenCode] JSON extraction failed:', e.message);
+        }
+      }
+      
+      // If no valid JSON found, return error
+      console.log('[runOpenCode] No valid JSON in response');
+      return { error: 'No structured output from LLM and no valid JSON found' };
     }
     
+    // No format requested - return plain text
     const parts = result.data?.info?.parts || result.data?.parts || [];
     const textParts = parts.filter(p => p.type === 'text');
     const text = textParts.map(p => p.text || '').join('');
@@ -309,15 +336,15 @@ ${JSON.stringify(ProblemJsonSchema, null, 2)}`;
       body += chunk;
     }
     
-    const { sessionId, notes, questions, excalidrawData } = JSON.parse(body);
+    const { sessionId, notes, questions, excalidrawData, elapsedSeconds, isPaused } = JSON.parse(body);
     
     const stmt = db.prepare(`
       UPDATE sessions 
-      SET notes = ?, questions = ?, excalidraw_data = ?, updated_at = CURRENT_TIMESTAMP
+      SET notes = ?, questions = ?, excalidraw_data = ?, elapsed_seconds = ?, is_paused = ?, updated_at = CURRENT_TIMESTAMP
       WHERE id = ?
     `);
     
-    stmt.run(JSON.stringify(notes), JSON.stringify(questions), JSON.stringify(excalidrawData), sessionId);
+    stmt.run(JSON.stringify(notes), JSON.stringify(questions), JSON.stringify(excalidrawData), elapsedSeconds || 0, isPaused ? 1 : 0, sessionId);
     
     res.writeHead(200);
     res.end(JSON.stringify({ success: true }));
@@ -343,7 +370,9 @@ ${JSON.stringify(ProblemJsonSchema, null, 2)}`;
       problem: JSON.parse(session.problem),
       notes: session.notes ? JSON.parse(session.notes) : [],
       questions: session.questions ? JSON.parse(session.questions) : [],
-      excalidrawData: session.excalidraw_data ? JSON.parse(session.excalidraw_data) : null
+      excalidrawData: session.excalidraw_data ? JSON.parse(session.excalidraw_data) : null,
+      elapsedSeconds: session.elapsed_seconds || 0,
+      isPaused: session.is_paused === 1
     }));
     return;
   }

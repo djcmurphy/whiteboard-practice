@@ -1,70 +1,47 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
+import { BrowserRouter, Routes, Route, useNavigate, useParams, Link } from "react-router-dom";
 import { ConfigPanel } from "./components/ConfigPanel";
 import { SessionPage } from "./components/SessionPage";
 import { ResultsPage } from "./components/ResultsPage";
+import { useSessionStore } from "./stores/sessionStore";
+import { api } from "./lib/api";
 
-type Page = "home" | "config" | "session" | "results";
+function HomePage() {
+  const navigate = useNavigate();
+  const { sessionId, loadSession } = useSessionStore();
+  const [lastSessionId, setLastSessionId] = useState<string | null>(null);
+  const [isResuming, setIsResuming] = useState(false);
 
-function App() {
-  const [page, setPage] = useState<Page>("home");
+  useEffect(() => {
+    const saved = localStorage.getItem('lastSessionId');
+    setLastSessionId(saved);
+  }, []);
 
-  return (
-    <div className="min-h-screen flex flex-col bg-zinc-50">
-      <header className="bg-white border-b border-zinc-200 px-4 py-3 flex items-center justify-between">
-        <h1 className="text-lg font-semibold tracking-tight text-zinc-900">
-          whiteboard-practice_
-        </h1>
-        <nav className="flex gap-2">
-          <button
-            onClick={() => setPage("home")}
-            className="px-3 py-1.5 text-sm bg-zinc-100 border border-zinc-200 hover:bg-zinc-200"
-          >
-            home
-          </button>
-          <button
-            onClick={() => setPage("config")}
-            className="px-3 py-1.5 text-sm bg-zinc-100 border border-zinc-200 hover:bg-zinc-200"
-          >
-            new-session
-          </button>
-        </nav>
-      </header>
-
-      <main className="flex-1 p-6">
-        {page === "home" && <HomePage onNewSession={() => setPage("config")} />}
-        {page === "config" && (
-          <ConfigPanel onStart={() => setPage("session")} />
-        )}
-        {page === "session" && <SessionPage onFinish={() => setPage("results")} />}
-        {page === "results" && <ResultsPage onHome={() => setPage("home")} />}
-      </main>
-    </div>
-  );
-}
-
-function HomePage({ onNewSession }: { onNewSession: () => void }) {
-  const [prompt, setPrompt] = useState("");
-  const [response, setResponse] = useState("");
-  const [isLoading, setIsLoading] = useState(false);
-
-  const handleTest = async () => {
-    if (!prompt.trim()) return;
-    setIsLoading(true);
-    setResponse("...");
-
+  const handleResume = async () => {
+    if (!lastSessionId) return;
+    setIsResuming(true);
     try {
-      const res = await fetch("http://localhost:3001/api/test", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ prompt }),
+      const session = await api.getSession(lastSessionId);
+      loadSession({
+        sessionId: session.id,
+        config: session.config,
+        problem: session.problem,
+        notes: session.notes || '',
+        privateNotes: '',
+        questions: session.questions || [],
+        excalidrawData: session.excalidrawData,
+        elapsedSeconds: session.elapsedSeconds || 0,
+        isPaused: session.isPaused || false,
+        showExamples: false,
+        showConstraints: false,
       });
-      const data = await res.json();
-      setResponse(data.response);
-    } catch (err) {
-      setResponse("Error: " + String(err));
-    } finally {
-      setIsLoading(false);
+      navigate(`/session/${session.id}`);
+    } catch (e) {
+      console.error('Failed to resume session:', e);
+      localStorage.removeItem('lastSessionId');
+      setLastSessionId(null);
     }
+    setIsResuming(false);
   };
 
   return (
@@ -74,43 +51,135 @@ function HomePage({ onNewSession }: { onNewSession: () => void }) {
         <h2 className="text-2xl font-light mb-8 text-zinc-800">
           whiteboard session runner
         </h2>
-        <button
-          onClick={onNewSession}
-          className="px-6 py-3 bg-zinc-900 text-white hover:bg-zinc-700"
-        >
-          start-session_
-        </button>
-      </div>
-
-      <div className="border border-zinc-300 bg-white">
-        <div className="p-2 border-b border-zinc-200 bg-zinc-100">
-          <span className="text-xs text-zinc-500">// LLM TEST</span>
-        </div>
-        <div className="p-4">
-          <textarea
-            value={prompt}
-            onChange={(e) => setPrompt(e.target.value)}
-            placeholder="Test prompt..."
-            className="w-full h-24 p-2 border border-zinc-200 text-sm resize-none focus:outline-none focus:border-zinc-400"
-          />
-          <div className="mt-2 flex gap-2">
+        <div className="flex gap-4 justify-center">
+          <Link
+            to="/config"
+            className="px-6 py-3 bg-zinc-900 text-white hover:bg-zinc-700"
+          >
+            start-session_
+          </Link>
+          {lastSessionId && (
             <button
-              onClick={handleTest}
-              disabled={isLoading}
-              className="px-4 py-2 bg-zinc-900 text-white text-sm hover:bg-zinc-700 disabled:opacity-50"
+              onClick={handleResume}
+              disabled={isResuming}
+              className="px-6 py-3 bg-zinc-100 border border-zinc-300 hover:bg-zinc-200"
             >
-              {isLoading ? "..." : "send"}
+              {isResuming ? "..." : "resume"}
             </button>
-          </div>
-          {response && (
-            <div className="mt-4 p-3 bg-zinc-50 border border-zinc-200 max-h-64 overflow-auto whitespace-pre-wrap text-sm text-zinc-600">
-                {response}
-            </div>
           )}
         </div>
       </div>
     </div>
   );
+}
+
+function ConfigPage() {
+  const navigate = useNavigate();
+  const { startSession } = useSessionStore();
+
+  const handleStart = (sessionId: string) => {
+    navigate(`/session/${sessionId}`);
+  };
+
+  return <ConfigPanel onStart={handleStart} />;
+}
+
+function SessionRoute() {
+  const { id } = useParams<{ id: string }>();
+  const navigate = useNavigate();
+  const { sessionId, loadSession, problem } = useSessionStore();
+  const [isLoading, setIsLoading] = useState(true);
+
+  useEffect(() => {
+    if (sessionId === id) {
+      setIsLoading(false);
+      return;
+    }
+
+    async function load() {
+      if (!id) return;
+      try {
+        const session = await api.getSession(id);
+        loadSession({
+          sessionId: session.id,
+          config: session.config,
+          problem: session.problem,
+          notes: session.notes || '',
+          privateNotes: '',
+          questions: session.questions || [],
+          excalidrawData: session.excalidrawData,
+          elapsedSeconds: session.elapsedSeconds || 0,
+          isPaused: session.isPaused || false,
+          showExamples: false,
+          showConstraints: false,
+        });
+      } catch (e) {
+        console.error('Failed to load session:', e);
+        navigate('/');
+      }
+      setIsLoading(false);
+    }
+    load();
+  }, [id]);
+
+  if (isLoading || !problem) {
+    return (
+      <div className="flex items-center justify-center h-64">
+        <p className="text-zinc-500">Loading session...</p>
+      </div>
+    );
+  }
+
+  return <SessionPage onFinish={() => navigate('/results')} />;
+}
+
+function App() {
+  return (
+    <BrowserRouter>
+      <div className="min-h-screen flex flex-col bg-zinc-50">
+        <header className="bg-white border-b border-zinc-200 px-4 py-3 flex items-center justify-between">
+          <Link to="/" className="text-lg font-semibold tracking-tight text-zinc-900">
+            whiteboard-practice_
+          </Link>
+          <nav className="flex gap-2">
+            <Link
+              to="/"
+              className="px-3 py-1.5 text-sm bg-zinc-100 border border-zinc-200 hover:bg-zinc-200"
+            >
+              home
+            </Link>
+            <Link
+              to="/config"
+              className="px-3 py-1.5 text-sm bg-zinc-100 border border-zinc-200 hover:bg-zinc-200"
+            >
+              new-session
+            </Link>
+          </nav>
+        </header>
+
+        <main className="flex-1 p-6">
+          <Routes>
+            <Route path="/" element={<HomePage />} />
+            <Route path="/config" element={<ConfigPage />} />
+            <Route path="/session/:id" element={<SessionRoute />} />
+            <Route path="/results" element={<ResultsPageWrapper />} />
+          </Routes>
+        </main>
+      </div>
+    </BrowserRouter>
+  );
+}
+
+function ResultsPageWrapper() {
+  const navigate = useNavigate();
+  const { evaluationResult } = useSessionStore();
+
+  if (!evaluationResult) {
+    navigate('/');
+    return null;
+  }
+
+  return <ResultsPage onHome={() => navigate('/')} />;
 }
 
 export default App;

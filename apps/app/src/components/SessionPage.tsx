@@ -61,20 +61,30 @@ export function SessionPage({ onFinish }: SessionPageProps) {
     const now = Date.now();
     if (now - lastSaveRef.current > 10000) {
       lastSaveRef.current = now;
-      api.saveSession(sessionId, notes, questions, {
-        elements: excalidrawAPIRef.current?.getSceneElements() || [],
-      });
+      api.saveSession(
+        sessionId, 
+        notes, 
+        questions, 
+        { elements: excalidrawAPIRef.current?.getSceneElements() || [] },
+        elapsedSeconds,
+        isPaused
+      );
     }
-  }, [sessionId, notes, questions]);
+  }, [sessionId, notes, questions, elapsedSeconds, isPaused]);
 
   const finish = async () => {
     if (isFinished.current) return;
     isFinished.current = true;
     
     if (sessionId && excalidrawAPIRef.current) {
-      await api.saveSession(sessionId, notes, questions, {
-        elements: excalidrawAPIRef.current.getSceneElements(),
-      });
+      await api.saveSession(
+        sessionId, 
+        notes, 
+        questions, 
+        { elements: excalidrawAPIRef.current.getSceneElements() },
+        elapsedSeconds,
+        isPaused
+      );
     }
     
     try {
@@ -168,7 +178,7 @@ export function SessionPage({ onFinish }: SessionPageProps) {
         </div>
       </div>
 
-      <div className="flex-1 grid grid-cols-5 gap-4" style={{ minHeight: 0 }}>
+      <div className="flex-1 grid grid-cols-5 gap-4 overflow-hidden">
         <div className="col-span-1 flex flex-col gap-4 overflow-y-auto">
           <div className="bg-zinc-50 border border-zinc-200 p-4">
             <p className="text-xs text-zinc-400 mb-2">// description</p>
@@ -254,7 +264,7 @@ export function SessionPage({ onFinish }: SessionPageProps) {
 
         <div
           className="col-span-3 border border-zinc-200 bg-white overflow-hidden"
-          style={{ height: "100%", minHeight: "500px" }}
+          style={{ height: "100%" }}
         >
           <div style={{ height: "100%" }}>
             <Excalidraw

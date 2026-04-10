@@ -3,7 +3,7 @@ import { useSessionStore } from '../stores/sessionStore';
 import { api } from '../lib/api';
 
 interface ConfigPanelProps {
-  onStart: () => void;
+  onStart: (sessionId: string) => void;
 }
 
 const defaultConfig = {
@@ -56,7 +56,7 @@ export function ConfigPanel({ onStart }: ConfigPanelProps) {
 
       startSession(result.sessionId, result.config as any, result.problem);
       setShowOptions(formData.showExamples, formData.showConstraints);
-      onStart();
+      onStart(result.sessionId);
     } catch (err) {
       console.error('[ConfigPanel] Error:', err);
       setError(String(err));
