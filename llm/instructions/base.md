@@ -17,6 +17,20 @@ When generating problems, you MUST ensure they meet these criteria:
 - Example BAD: "Design a credit card spending limit enforcement system" (can't actually stop a CC from working)
 - Example GOOD: "Design a URL shortener like bit.ly" (real system that exists, can discuss tradeoffs)
 
+## Batch Generation Mode
+
+When generating multiple problems:
+- Generate {{count}} distinct problems
+- Each problem should be different from the others
+- Return an array of problems in JSON format
+
+## Custom Requirements
+
+If the user provides custom notes or requirements, incorporate them into the problem generation:
+- Custom notes: {{customNotes}}
+- Blend custom requirements naturally into the problem context
+- If custom notes conflict with other parameters, prioritize the custom notes
+
 ## Session Context
 
 - **Problem Type:** {{problemType}}
@@ -47,8 +61,21 @@ When generating problems, you MUST ensure they meet these criteria:
 
 ## Response Format
 
-When evaluating, respond in JSON format:
+When generating multiple problems, respond with a JSON array:
+```json
+[
+  {
+    "title": "Problem title",
+    "description": "Detailed problem description",
+    "examples": ["Example 1", "Example 2"],
+    "constraints": ["Constraint 1", "Constraint 2"],
+    "hints": ["Hint 1", "Hint 2"]
+  },
+  ...
+]
+```
 
+When evaluating, respond in JSON format:
 ```json
 {
   "scores": {

@@ -45,12 +45,52 @@ export interface EvaluateResponse {
   error?: string;
 }
 
+export interface LlmModel {
+  id: string;
+  name: string;
+  provider: string;
+}
+
+export interface LlmStatus {
+  connected: boolean;
+  currentModel: string;
+  availableModels: LlmModel[];
+  serverUrl: string | null;
+}
+
+export interface Example {
+  id: string;
+  problemType: string;
+  difficulty: string;
+  title: string;
+  description: string;
+  examples: string[];
+  constraints: string[];
+  hints: string[];
+  customNotes: string;
+  createdAt: string;
+}
+
+export interface GenerateRequest {
+  config: SessionConfig;
+  count?: number;
+  customNotes?: string;
+}
+
+export interface GenerateResponse {
+  examples: Example[];
+}
+
 async function request<T>(path: string, method: string, body?: any): Promise<T> {
   const res = await fetch(`${API_BASE}${path}`, {
     method,
-    headers: { 'Content-Type': 'application/json' },
+    headers: body ? { 'Content-Type': 'application/json' } : {},
     body: body ? JSON.stringify(body) : undefined
   });
+  if (!res.ok) {
+    const text = await res.text();
+    throw new Error(`HTTP ${res.status}: ${text}`);
+  }
   return res.json();
 }
 
@@ -59,7 +99,14 @@ export const api = {
   
   startServer: () => request<{ success: boolean }>('/start', 'POST'),
   
-  generateProblem: (config: SessionConfig) => request<{ sessionId: string; problem: ProblemData; config: SessionConfig }>('/generate', 'POST', config),
+  generateExamples: (config: SessionConfig, count: number = 3, customNotes: string = '') => 
+    request<GenerateResponse>('/generate', 'POST', { config, count, customNotes }),
+  
+  getExamples: () => request<{ examples: Example[] }>('/examples', 'GET'),
+  
+  deleteExample: (id: string) => request<{ success: boolean }>(`/examples/${id}`, 'DELETE'),
+  
+  startFromExample: (id: string) => request<{ sessionId: string; problem: ProblemData; config: SessionConfig }>(`/examples/${id}/start`, 'POST'),
   
   getSessions: () => request<SessionListItem[]>('/sessions', 'GET'),
   
@@ -70,6 +117,10 @@ export const api = {
   
   evaluate: (sessionId: string, notes: string, questions: any[], config: SessionConfig, problem: ProblemData) => 
     request<EvaluateResponse>('/evaluate', 'POST', { sessionId, notes, questions, config, problem }),
+    
+  getLlmStatus: () => request<LlmStatus>('/llm', 'GET'),
+  
+  setLlmModel: (modelId: string) => request<LlmStatus>('/llm', 'POST', { modelId }),
 };
 
 export const checkOpenCodeInstalled = () => api.checkOpenCode().then(r => r.installed);
