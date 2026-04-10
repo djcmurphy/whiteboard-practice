@@ -59,7 +59,7 @@ function HomePage({ onNewSession }: { onNewSession: () => void }) {
         body: JSON.stringify({ prompt }),
       });
       const data = await res.json();
-      setResponse(data.response || JSON.stringify(data, null, 2));
+      setResponse(data.response);
     } catch (err) {
       setResponse("Error: " + String(err));
     } finally {
@@ -103,10 +103,8 @@ function HomePage({ onNewSession }: { onNewSession: () => void }) {
             </button>
           </div>
           {response && (
-            <div className="mt-4 p-3 bg-zinc-50 border border-zinc-200 max-h-64 overflow-auto">
-              <pre className="text-xs text-zinc-600 whitespace-pre-wrap">
-                {response.slice(0, 1000)}
-              </pre>
+            <div className="mt-4 p-3 bg-zinc-50 border border-zinc-200 max-h-64 overflow-auto whitespace-pre-wrap text-sm text-zinc-600">
+                {response}
             </div>
           )}
         </div>

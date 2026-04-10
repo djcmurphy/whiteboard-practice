@@ -16,8 +16,7 @@ interface ProblemData {
   hints: string[];
 }
 
-interface SessionStore {
-  // Current session
+interface SessionState {
   sessionId: string | null;
   config: SessionConfig | null;
   problem: ProblemData | null;
@@ -27,62 +26,74 @@ interface SessionStore {
   excalidrawData: any;
   elapsedSeconds: number;
   isPaused: boolean;
-  
-  // UI state
-  isLoading: boolean;
+  showExamples: boolean;
+  showConstraints: boolean;
   evaluationResult: EvaluationResult | null;
-  
-  // Actions
-  setSession: (sessionId: string, config: SessionConfig, problem: ProblemData) => void;
-  setNotes: (notes: string) => void;
-  setPrivateNotes: (notes: string) => void;
-  setExcalidrawData: (data: any) => void;
-  addQuestion: (text: string) => void;
-  setQuestionAnswer: (id: string, answer: string) => void;
-  incrementElapsed: () => void;
-  setIsPaused: (paused: boolean) => void;
-  setIsLoading: (loading: boolean) => void;
-  setEvaluationResult: (result: EvaluationResult) => void;
+}
+
+interface SessionActions {
+  startSession: (sessionId: string, config: SessionConfig, problem: ProblemData) => void;
+  updateSession: (updates: Partial<Pick<SessionState, 'notes' | 'privateNotes' | 'excalidrawData'>>) => void;
+  addQuestion: (text: string) => string;
+  updateQuestion: (id: string, updates: Partial<Pick<Question, 'text' | 'answer'>>) => void;
+  setTimer: (elapsed?: number, isPaused?: boolean) => void;
+  setShowOptions: (showExamples: boolean, showConstraints: boolean) => void;
+  complete: (result: EvaluationResult) => void;
   reset: () => void;
 }
 
-const initialState = {
+const initialState: SessionState = {
   sessionId: null,
   config: null,
   problem: null,
   notes: '',
   privateNotes: '',
-  questions: [] as Question[],
+  questions: [],
   excalidrawData: null,
   elapsedSeconds: 0,
   isPaused: false,
-  isLoading: false,
+  showExamples: false,
+  showConstraints: false,
   evaluationResult: null,
 };
 
-export const useSessionStore = create<SessionStore>((set) => ({
+export const useSessionStore = create<SessionState & SessionActions>((set, get) => ({
   ...initialState,
 
-  setSession: (sessionId, config, problem) => set({ sessionId, config, problem }),
-  
-  setNotes: (notes) => set({ notes }),
-  
-  setPrivateNotes: (privateNotes) => set({ privateNotes }),
-  
-  setExcalidrawData: (data) => set({ excalidrawData: data }),
-  
-  addQuestion: (text) => set((state) => ({
-    questions: [...state.questions, { id: crypto.randomUUID(), text, timestamp: Date.now() }]
+  startSession: (sessionId, config, problem) => set({
+    sessionId,
+    config,
+    problem,
+    elapsedSeconds: 0,
+    isPaused: false,
+    notes: '',
+    privateNotes: '',
+    questions: [],
+    excalidrawData: null,
+    evaluationResult: null,
+  }),
+
+  updateSession: (updates) => set((state) => ({ ...state, ...updates })),
+
+  addQuestion: (text) => {
+    const id = crypto.randomUUID();
+    const question = { id, text, timestamp: Date.now() };
+    set((state) => ({ questions: [...state.questions, question] }));
+    return id;
+  },
+
+  updateQuestion: (id, updates) => set((state) => ({
+    questions: state.questions.map(q => q.id === id ? { ...q, ...updates } : q)
   })),
-  
-  setQuestionAnswer: (id, answer) => set((state) => ({
-    questions: state.questions.map(q => q.id === id ? { ...q, answer } : q)
+
+  setTimer: (elapsed, isPaused) => set((state) => ({
+    elapsedSeconds: elapsed ?? state.elapsedSeconds,
+    isPaused: isPaused ?? state.isPaused,
   })),
-  
-  incrementElapsed: () => set((state) => ({ elapsedSeconds: state.elapsedSeconds + 1 })),
-  setIsPaused: (paused) => set({ isPaused: paused }),
-  setIsLoading: (loading) => set({ isLoading: loading }),
-  setEvaluationResult: (result) => set({ evaluationResult: result }),
-  
-  reset: () => set(initialState)
+
+  setShowOptions: (showExamples, showConstraints) => set({ showExamples, showConstraints }),
+
+  complete: (result) => set({ evaluationResult: result }),
+
+  reset: () => set(initialState),
 }));

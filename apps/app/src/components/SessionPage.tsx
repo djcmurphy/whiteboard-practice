@@ -14,24 +14,22 @@ export function SessionPage({ onFinish }: SessionPageProps) {
     config,
     problem,
     notes,
-    setNotes,
     privateNotes,
-    setPrivateNotes,
     questions,
-    addQuestion,
     excalidrawData,
     elapsedSeconds,
-    incrementElapsed,
     isPaused,
-    setIsPaused,
-    setIsLoading,
-    setEvaluationResult,
+    showExamples,
+    showConstraints,
+    updateSession,
+    addQuestion,
+    updateQuestion,
+    setTimer,
+    complete,
   } = useSessionStore();
 
-  const [newQuestion, setNewQuestion] = useState("");
   const [llmQuestion, setLlmQuestion] = useState("");
-  const [llmAnswer, setLlmAnswer] = useState("");
-  const [isAskingLlm, setIsAskingLlm] = useState(false);
+  const [llmLoadingId, setLlmLoadingId] = useState<string | null>(null);
   const excalidrawAPIRef = useRef<any>(null);
   const isFinished = useRef(false);
   const lastSaveRef = useRef(0);
@@ -42,12 +40,22 @@ export function SessionPage({ onFinish }: SessionPageProps) {
   const secs = remaining % 60;
   const urgent = remaining < 300;
 
+  // Timer - also handles finishing when time runs out
   useEffect(() => {
     if (isPaused || remaining <= 0 || isFinished.current) return;
-    const timer = setInterval(incrementElapsed, 1000);
+    
+    if (remaining <= 1) {
+      finish();
+      return;
+    }
+    
+    const timer = setInterval(() => {
+      setTimer(elapsedSeconds + 1);
+    }, 1000);
     return () => clearInterval(timer);
   }, [isPaused, remaining]);
 
+  // Auto-save every 10 seconds
   useEffect(() => {
     if (!sessionId || isFinished.current) return;
     const now = Date.now();
@@ -59,22 +67,16 @@ export function SessionPage({ onFinish }: SessionPageProps) {
     }
   }, [sessionId, notes, questions]);
 
-  useEffect(() => {
-    if (remaining <= 0 && !isFinished.current) {
-      isFinished.current = true;
-      finish();
-    }
-  }, [remaining]);
-
   const finish = async () => {
     if (isFinished.current) return;
     isFinished.current = true;
-    setIsLoading(true);
+    
     if (sessionId && excalidrawAPIRef.current) {
       await api.saveSession(sessionId, notes, questions, {
         elements: excalidrawAPIRef.current.getSceneElements(),
       });
     }
+    
     try {
       const result = await api.evaluate(
         sessionId!,
@@ -84,7 +86,7 @@ export function SessionPage({ onFinish }: SessionPageProps) {
         problem!,
       );
       if (result.overallScore !== undefined) {
-        setEvaluationResult({
+        complete({
           scores: result.scores || {},
           overallScore: result.overallScore,
           grade: result.grade || "needs-improvement",
@@ -98,33 +100,30 @@ export function SessionPage({ onFinish }: SessionPageProps) {
     } catch (e) {
       console.error(e);
     }
-    setIsLoading(false);
     onFinish();
   };
 
-  const handleAddQuestion = () => {
-    if (newQuestion.trim()) {
-      addQuestion(newQuestion.trim());
-      setNewQuestion("");
-    }
-  };
-
   const handleAskLlm = async () => {
-    if (!llmQuestion.trim() || isAskingLlm) return;
-    setIsAskingLlm(true);
-    setLlmAnswer("...");
+    if (!llmQuestion.trim()) return;
+    const questionText = llmQuestion;
+    const tempId = addQuestion(questionText);
+
+    setLlmLoadingId(tempId);
+    setLlmQuestion("");
+
     try {
       const res = await fetch("http://localhost:3001/api/test", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ prompt: llmQuestion }),
+        body: JSON.stringify({ prompt: questionText, problem }),
       });
       const data = await res.json();
-      setLlmAnswer(data.response || "No response");
+      const answer = data.response || data.error || "No response";
+      updateQuestion(tempId, { answer });
     } catch (e) {
-      setLlmAnswer("Error: " + String(e));
+      updateQuestion(tempId, { answer: "Error: " + String(e) });
     }
-    setIsAskingLlm(false);
+    setLlmLoadingId(null);
   };
 
   const excalidrawOptions = useMemo(
@@ -155,7 +154,7 @@ export function SessionPage({ onFinish }: SessionPageProps) {
 
         <div className="flex gap-2">
           <button
-            onClick={() => setIsPaused(!isPaused)}
+            onClick={() => setTimer(undefined, !isPaused)}
             className="px-4 py-2 text-sm border border-zinc-300 hover:bg-zinc-100"
           >
             {isPaused ? "resume" : "pause"}
@@ -178,7 +177,7 @@ export function SessionPage({ onFinish }: SessionPageProps) {
             </p>
           </div>
 
-          {problem?.examples && problem.examples.length > 0 && (
+          {showExamples && problem?.examples && problem.examples.length > 0 && (
             <div className="bg-zinc-50 border border-zinc-200 p-4">
               <p className="text-xs text-zinc-400 mb-2">// examples</p>
               <div className="text-sm text-zinc-700 space-y-2">
@@ -191,16 +190,18 @@ export function SessionPage({ onFinish }: SessionPageProps) {
             </div>
           )}
 
-          {problem?.constraints && problem.constraints.length > 0 && (
-            <div className="bg-zinc-50 border border-zinc-200 p-4">
-              <p className="text-xs text-zinc-400 mb-2">// constraints</p>
-              <ul className="text-sm text-zinc-700 list-disc list-inside">
-                {problem.constraints.map((c, i) => (
-                  <li key={i}>{c}</li>
-                ))}
-              </ul>
-            </div>
-          )}
+          {showConstraints &&
+            problem?.constraints &&
+            problem.constraints.length > 0 && (
+              <div className="bg-zinc-50 border border-zinc-200 p-4">
+                <p className="text-xs text-zinc-400 mb-2">// constraints</p>
+                <ul className="text-sm text-zinc-700 list-disc list-inside">
+                  {problem.constraints.map((c, i) => (
+                    <li key={i}>{c}</li>
+                  ))}
+                </ul>
+              </div>
+            )}
 
           <div className="border border-zinc-200 bg-white">
             <div className="p-2 border-b border-zinc-100">
@@ -216,16 +217,11 @@ export function SessionPage({ onFinish }: SessionPageProps) {
               />
               <button
                 onClick={handleAskLlm}
-                disabled={isAskingLlm || !llmQuestion.trim()}
+                disabled={llmLoadingId !== null || !llmQuestion.trim()}
                 className="mt-2 w-full py-1.5 text-sm bg-zinc-900 text-white hover:bg-zinc-700 disabled:opacity-50"
               >
-                {isAskingLlm ? "..." : "ask"}
+                {llmLoadingId ? "..." : "ask"}
               </button>
-              {llmAnswer && (
-                <div className="mt-2 p-2 bg-zinc-50 text-xs text-zinc-600 max-h-32 overflow-y-auto whitespace-pre-wrap">
-                  {llmAnswer.slice(0, 500)}
-                </div>
-              )}
             </div>
           </div>
 
@@ -234,27 +230,20 @@ export function SessionPage({ onFinish }: SessionPageProps) {
               <span className="text-xs text-zinc-400">// my questions</span>
             </div>
             <div className="p-2">
-              <div className="flex gap-2 mb-2">
-                <input
-                  type="text"
-                  value={newQuestion}
-                  onChange={(e) => setNewQuestion(e.target.value)}
-                  onKeyDown={(e) => e.key === "Enter" && handleAddQuestion()}
-                  placeholder="Note a question..."
-                  className="flex-1 p-2 text-sm border border-zinc-200 focus:outline-none focus:border-zinc-400"
-                />
-                <button
-                  onClick={handleAddQuestion}
-                  className="px-3 text-sm bg-zinc-100 hover:bg-zinc-200 border border-zinc-200"
-                >
-                  +
-                </button>
-              </div>
               {questions.length > 0 && (
-                <div className="space-y-1 max-h-32 overflow-y-auto">
+                <div className="space-y-2 max-h-48 overflow-y-auto">
                   {questions.map((q) => (
-                    <div key={q.id} className="p-1.5 text-xs bg-zinc-50 text-zinc-600">
-                      {q.text}
+                    <div key={q.id} className="text-xs">
+                      <div className="p-1.5 bg-zinc-50 text-zinc-600">
+                        {q.text}
+                      </div>
+                      {q.id.startsWith("temp-") && llmLoadingId === q.id ? (
+                        <div className="p-1.5 text-zinc-400">...</div>
+                      ) : q.answer ? (
+                        <div className="p-1.5 bg-zinc-100 text-zinc-500 whitespace-pre-wrap">
+                          {q.answer}
+                        </div>
+                      ) : null}
                     </div>
                   ))}
                 </div>
@@ -264,8 +253,8 @@ export function SessionPage({ onFinish }: SessionPageProps) {
         </div>
 
         <div
-          className="col-span-2 border border-zinc-200 bg-white overflow-hidden"
-          style={{ height: "100%", minHeight: "400px" }}
+          className="col-span-3 border border-zinc-200 bg-white overflow-hidden"
+          style={{ height: "100%", minHeight: "500px" }}
         >
           <div style={{ height: "100%" }}>
             <Excalidraw
@@ -278,22 +267,26 @@ export function SessionPage({ onFinish }: SessionPageProps) {
           </div>
         </div>
 
-        <div className="col-span-2 flex flex-col gap-4">
+        <div className="col-span-1 flex flex-col gap-4">
           <div className="flex-1 flex flex-col min-h-0">
-            <label className="text-xs text-zinc-400 mb-2">// notes (shared)</label>
+            <label className="text-xs text-zinc-400 mb-2">
+              // notes (shared)
+            </label>
             <textarea
               value={notes}
-              onChange={(e) => setNotes(e.target.value)}
+              onChange={(e) => updateSession({ notes: e.target.value })}
               placeholder="Approach, algorithm, key decisions..."
               className="flex-1 p-3 border border-zinc-200 text-sm resize-none focus:outline-none focus:border-zinc-400"
             />
           </div>
 
           <div className="flex-1 flex flex-col min-h-0">
-            <label className="text-xs text-zinc-400 mb-2">// private notes</label>
+            <label className="text-xs text-zinc-400 mb-2">
+              // private notes
+            </label>
             <textarea
               value={privateNotes}
-              onChange={(e) => setPrivateNotes(e.target.value)}
+              onChange={(e) => updateSession({ privateNotes: e.target.value })}
               placeholder="Personal reminders, reminders to self..."
               className="flex-1 p-3 border border-zinc-200 text-sm resize-none focus:outline-none focus:border-zinc-400 bg-zinc-50"
             />

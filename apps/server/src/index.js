@@ -114,21 +114,36 @@ async function runOpenCode(prompt, format = null) {
       console.log('[runOpenCode] Created session:', sessionId);
     }
     
+    const requestBody = {
+      parts: [{ type: 'text', text: prompt }]
+    };
+    if (format) {
+      requestBody.format = format;
+    }
+    
     const result = await client.session.prompt({
       path: { id: sessionId },
-      body: {
-        parts: [{ type: 'text', text: prompt }],
-        format: format
-      }
+      body: requestBody
     });
     
     console.log('[runOpenCode] Result keys:', Object.keys(result));
-    console.log('[runOpenCode] Result data keys:', result.data ? Object.keys(result.data) : 'no data');
+    
+    if (result.error) {
+      console.log('[runOpenCode] Error response:', result.error);
+      return { error: result.error };
+    }
+    
+    if (!result.data) {
+      console.log('[runOpenCode] No data in result');
+      return { error: 'No response from LLM' };
+    }
+    
+    console.log('[runOpenCode] Result data keys:', Object.keys(result.data));
     console.log('[runOpenCode] Result info keys:', result.data?.info ? Object.keys(result.data.info) : 'no info');
-    console.log('[runOpenCode] Result data:', JSON.stringify(result.data).slice(0, 500));
+    console.log('[runOpenCode] Result data:', result.data ? JSON.stringify(result.data).slice(0, 500) : 'no data');
     
     // If structured output was requested, return it directly
-    console.log('[runOpenCode] Structured:', JSON.stringify(result.data?.info?.structured).slice(0, 300));
+    console.log('[runOpenCode] Structured:', result.data?.info?.structured ? JSON.stringify(result.data.info.structured).slice(0, 300) : 'no structured');
     if (format && result.data?.info?.structured) {
       return { response: JSON.stringify(result.data.info.structured) };
     }
@@ -208,8 +223,27 @@ const server = http.createServer(async (req, res) => {
     for await (const chunk of req) {
       body += chunk;
     }
-    const { prompt } = JSON.parse(body);
-    const result = await runOpenCode(prompt);
+    const { prompt, problem } = JSON.parse(body);
+    
+    const problemDetails = [];
+    if (problem?.title) problemDetails.push(`Title: ${problem.title}`);
+    if (problem?.description) problemDetails.push(`\nDescription: ${problem.description}`);
+    if (problem?.examples?.length) problemDetails.push(`\nExamples:\n${problem.examples.join('\n')}`);
+    if (problem?.constraints?.length) problemDetails.push(`\nConstraints:\n${problem.constraints.join('\n')}`);
+    if (problem?.hints?.length) problemDetails.push(`\nHints:\n${problem.hints.join('\n')}`);
+
+    const systemPrompt = `You are an interviewer evaluating a candidate in a whiteboard technical exam.
+
+## Problem
+${problemDetails.join('\n')}
+
+## Instructions
+- Answer the candidate's questions directly and professionally
+- If something isn't specified, briefly note the assumption
+- Do not explain what the problem is - just answer the question
+- Keep responses short and focused`;
+
+    const result = await runOpenCode(`${systemPrompt}\n\nCandidate asks: ${prompt}`);
     res.writeHead(200);
     res.end(JSON.stringify(result));
     return;
@@ -234,7 +268,7 @@ Respond ONLY with valid JSON matching this schema:
 ${JSON.stringify(ProblemJsonSchema, null, 2)}`;
 
     const result = await runOpenCode(prompt, { type: 'json_schema', schema: ProblemJsonSchema });
-    console.log('[generate] Result:', JSON.stringify(result).slice(0, 500));
+    console.log('[generate] Result:', result.error ? result.error : (result.response ? result.response.slice(0, 500) : 'no response'));
     
     let parsedResult = result;
     if (result.response) {
@@ -365,7 +399,7 @@ Respond ONLY with valid JSON:
 }`;
 
     const result = await runOpenCode(prompt);
-    console.log('[evaluate] Result:', JSON.stringify(result).slice(0, 200));
+    console.log('[evaluate] Result:', result.error ? result.error : (result.response ? result.response.slice(0, 200) : 'no response'));
     
     let parsedResult = result;
     if (result.response) {

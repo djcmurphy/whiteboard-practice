@@ -18,6 +18,8 @@ const defaultConfig = {
     constraints: [] as string[],
     timeLimit: 30,
   },
+  showExamples: false,
+  showConstraints: false,
   evaluation: {
     allowedLanguages: ['javascript', 'python'],
     priorities: ['correctness', 'communication', 'time-complexity'],
@@ -32,7 +34,7 @@ const defaultConfig = {
 };
 
 export function ConfigPanel({ onStart }: ConfigPanelProps) {
-  const { setSession, setIsLoading } = useSessionStore();
+  const { startSession, setShowOptions } = useSessionStore();
   const [formData, setFormData] = useState(defaultConfig);
   const [isGenerating, setIsGenerating] = useState(false);
   const [error, setError] = useState('');
@@ -41,7 +43,6 @@ export function ConfigPanel({ onStart }: ConfigPanelProps) {
     console.log('[ConfigPanel] Starting generate...');
     setIsGenerating(true);
     setError('');
-    setIsLoading(true);
 
     try {
       console.log('[ConfigPanel] Calling API with config:', formData);
@@ -53,14 +54,14 @@ export function ConfigPanel({ onStart }: ConfigPanelProps) {
         return;
       }
 
-      setSession(result.sessionId, result.config as any, result.problem);
+      startSession(result.sessionId, result.config as any, result.problem);
+      setShowOptions(formData.showExamples, formData.showConstraints);
       onStart();
     } catch (err) {
       console.error('[ConfigPanel] Error:', err);
       setError(String(err));
     } finally {
       setIsGenerating(false);
-      setIsLoading(false);
     }
   };
 
@@ -137,7 +138,30 @@ export function ConfigPanel({ onStart }: ConfigPanelProps) {
             className="w-full p-2 border border-zinc-300 bg-white text-sm focus:outline-none focus:border-zinc-500"
           />
         </div>
-      </div>
+        </div>
+
+        <div className="flex gap-4 mt-4">
+          <label className="flex items-center gap-2 text-sm text-zinc-600">
+            <input
+              type="checkbox"
+              checked={formData.showExamples}
+              onChange={(e) => setFormData({ ...formData, showExamples: e.target.checked })}
+              className="w-4 h-4"
+            />
+            show-examples
+            <span className="text-xs text-zinc-400">(sample inputs)</span>
+          </label>
+          <label className="flex items-center gap-2 text-sm text-zinc-600">
+            <input
+              type="checkbox"
+              checked={formData.showConstraints}
+              onChange={(e) => setFormData({ ...formData, showConstraints: e.target.checked })}
+              className="w-4 h-4"
+            />
+            show-constraints
+            <span className="text-xs text-zinc-400">(limits to solve with)</span>
+          </label>
+        </div>
 
       <button
         onClick={handleGenerate}
