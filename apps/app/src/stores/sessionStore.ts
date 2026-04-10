@@ -6,6 +6,7 @@ interface Question {
   text: string;
   answer?: string;
   timestamp: number;
+  parentId?: string;
 }
 
 interface ProblemData {
@@ -48,7 +49,7 @@ interface SessionActions {
   }) => void;
   updateSession: (updates: Partial<Pick<SessionState, 'notes' | 'privateNotes' | 'excalidrawData'>>) => void;
   addQuestion: (text: string) => string;
-  updateQuestion: (id: string, updates: Partial<Pick<Question, 'text' | 'answer'>>) => void;
+  updateQuestion: (id: string, updates: Partial<Pick<Question, 'text' | 'answer' | 'parentId'>>) => void;
   setTimer: (elapsed?: number, isPaused?: boolean) => void;
   setShowOptions: (showExamples: boolean, showConstraints: boolean) => void;
   complete: (result: EvaluationResult) => void;

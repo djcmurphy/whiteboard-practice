@@ -1,5 +1,12 @@
 import { useState, useEffect } from "react";
-import { BrowserRouter, Routes, Route, useNavigate, useParams, Link } from "react-router-dom";
+import {
+  BrowserRouter,
+  Routes,
+  Route,
+  useNavigate,
+  useParams,
+  Link,
+} from "react-router-dom";
 import { ConfigPanel } from "./components/ConfigPanel";
 import { SessionPage } from "./components/SessionPage";
 import { ResultsPage } from "./components/ResultsPage";
@@ -13,7 +20,7 @@ function HomePage() {
   const [isResuming, setIsResuming] = useState(false);
 
   useEffect(() => {
-    const saved = localStorage.getItem('lastSessionId');
+    const saved = localStorage.getItem("lastSessionId");
     setLastSessionId(saved);
   }, []);
 
@@ -26,8 +33,8 @@ function HomePage() {
         sessionId: session.id,
         config: session.config,
         problem: session.problem,
-        notes: session.notes || '',
-        privateNotes: '',
+        notes: session.notes || "",
+        privateNotes: "",
         questions: session.questions || [],
         excalidrawData: session.excalidrawData,
         elapsedSeconds: session.elapsedSeconds || 0,
@@ -37,8 +44,8 @@ function HomePage() {
       });
       navigate(`/session/${session.id}`);
     } catch (e) {
-      console.error('Failed to resume session:', e);
-      localStorage.removeItem('lastSessionId');
+      console.error("Failed to resume session:", e);
+      localStorage.removeItem("lastSessionId");
       setLastSessionId(null);
     }
     setIsResuming(false);
@@ -104,8 +111,8 @@ function SessionRoute() {
           sessionId: session.id,
           config: session.config,
           problem: session.problem,
-          notes: session.notes || '',
-          privateNotes: '',
+          notes: session.notes || "",
+          privateNotes: "",
           questions: session.questions || [],
           excalidrawData: session.excalidrawData,
           elapsedSeconds: session.elapsedSeconds || 0,
@@ -114,8 +121,8 @@ function SessionRoute() {
           showConstraints: false,
         });
       } catch (e) {
-        console.error('Failed to load session:', e);
-        navigate('/');
+        console.error("Failed to load session:", e);
+        navigate("/");
       }
       setIsLoading(false);
     }
@@ -130,7 +137,7 @@ function SessionRoute() {
     );
   }
 
-  return <SessionPage onFinish={() => navigate('/results')} />;
+  return <SessionPage onFinish={() => navigate("/results")} />;
 }
 
 function App() {
@@ -138,7 +145,10 @@ function App() {
     <BrowserRouter>
       <div className="min-h-screen flex flex-col bg-zinc-50">
         <header className="bg-white border-b border-zinc-200 px-4 py-3 flex items-center justify-between">
-          <Link to="/" className="text-lg font-semibold tracking-tight text-zinc-900">
+          <Link
+            to="/"
+            className="text-lg font-semibold tracking-tight text-zinc-900"
+          >
             whiteboard-practice_
           </Link>
           <nav className="flex gap-2">
@@ -157,7 +167,7 @@ function App() {
           </nav>
         </header>
 
-        <main className="flex-1 p-6">
+        <main className="flex-1 flex flex-col overflow-hidden p-6 ">
           <Routes>
             <Route path="/" element={<HomePage />} />
             <Route path="/config" element={<ConfigPage />} />
@@ -175,11 +185,11 @@ function ResultsPageWrapper() {
   const { evaluationResult } = useSessionStore();
 
   if (!evaluationResult) {
-    navigate('/');
+    navigate("/");
     return null;
   }
 
-  return <ResultsPage onHome={() => navigate('/')} />;
+  return <ResultsPage onHome={() => navigate("/")} />;
 }
 
 export default App;

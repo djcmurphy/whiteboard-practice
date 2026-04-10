@@ -1,11 +1,8 @@
+import type { SessionConfig, Question } from '../types';
+
 const API_BASE = 'http://localhost:3001/api';
 
-export interface SessionConfig {
-  problemType: string;
-  context: { domain: string; focusAreas: string[] };
-  spec: { difficulty: string; topics: string[]; constraints: string[]; timeLimit: number };
-  evaluation: { allowedLanguages: string[]; priorities: string[]; criteria: { name: string; weight: number; description: string }[] };
-}
+export type { SessionConfig };
 
 export interface ProblemData {
   title: string;
@@ -20,11 +17,13 @@ export interface Session {
   config: SessionConfig;
   problem: ProblemData;
   notes: string;
-  questions: { id: string; text: string; answer?: string }[];
+  questions: Question[];
   excalidrawData: any;
   status: 'generated' | 'in-progress' | 'completed';
   createdAt: string;
   updatedAt: string;
+  elapsedSeconds?: number;
+  isPaused?: boolean;
 }
 
 export interface SessionListItem {

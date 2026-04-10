@@ -30,6 +30,7 @@ export function SessionPage({ onFinish }: SessionPageProps) {
 
   const [llmQuestion, setLlmQuestion] = useState("");
   const [llmLoadingId, setLlmLoadingId] = useState<string | null>(null);
+  const [replyToId, setReplyToId] = useState<string | null>(null);
   const excalidrawAPIRef = useRef<any>(null);
   const isFinished = useRef(false);
   const lastSaveRef = useRef(0);
@@ -43,12 +44,12 @@ export function SessionPage({ onFinish }: SessionPageProps) {
   // Timer - also handles finishing when time runs out
   useEffect(() => {
     if (isPaused || remaining <= 0 || isFinished.current) return;
-    
+
     if (remaining <= 1) {
       finish();
       return;
     }
-    
+
     const timer = setInterval(() => {
       setTimer(elapsedSeconds + 1);
     }, 1000);
@@ -62,12 +63,12 @@ export function SessionPage({ onFinish }: SessionPageProps) {
     if (now - lastSaveRef.current > 10000) {
       lastSaveRef.current = now;
       api.saveSession(
-        sessionId, 
-        notes, 
-        questions, 
+        sessionId,
+        notes,
+        questions,
         { elements: excalidrawAPIRef.current?.getSceneElements() || [] },
         elapsedSeconds,
-        isPaused
+        isPaused,
       );
     }
   }, [sessionId, notes, questions, elapsedSeconds, isPaused]);
@@ -75,18 +76,18 @@ export function SessionPage({ onFinish }: SessionPageProps) {
   const finish = async () => {
     if (isFinished.current) return;
     isFinished.current = true;
-    
+
     if (sessionId && excalidrawAPIRef.current) {
       await api.saveSession(
-        sessionId, 
-        notes, 
-        questions, 
+        sessionId,
+        notes,
+        questions,
         { elements: excalidrawAPIRef.current.getSceneElements() },
         elapsedSeconds,
-        isPaused
+        isPaused,
       );
     }
-    
+
     try {
       const result = await api.evaluate(
         sessionId!,
@@ -116,16 +117,32 @@ export function SessionPage({ onFinish }: SessionPageProps) {
   const handleAskLlm = async () => {
     if (!llmQuestion.trim()) return;
     const questionText = llmQuestion;
+
+    // Build conversation context for the LLM
+    let contextInfo = "";
+    if (replyToId) {
+      const parentQ = questions.find((q) => q.id === replyToId);
+      if (parentQ) {
+        contextInfo = `\n\nThis is a follow-up question to: "${parentQ.text}"\nPrevious answer: "${parentQ.answer || "N/A"}"`;
+      }
+    }
+
+    const fullPrompt = questionText + contextInfo;
     const tempId = addQuestion(questionText);
+
+    if (replyToId) {
+      updateQuestion(tempId, { parentId: replyToId });
+    }
 
     setLlmLoadingId(tempId);
     setLlmQuestion("");
+    setReplyToId(null);
 
     try {
       const res = await fetch("http://localhost:3001/api/test", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ prompt: questionText, problem }),
+        body: JSON.stringify({ prompt: fullPrompt, problem }),
       });
       const data = await res.json();
       const answer = data.response || data.error || "No response";
@@ -147,7 +164,7 @@ export function SessionPage({ onFinish }: SessionPageProps) {
   );
 
   return (
-    <div className="flex flex-col h-full">
+    <div className="flex flex-1 flex-col h-full min-h-0">
       <div className="flex items-center justify-between mb-4 pb-4 border-b border-zinc-200">
         <div className="flex-1 pr-4">
           <p className="text-xs text-zinc-400">// problem</p>
@@ -165,20 +182,23 @@ export function SessionPage({ onFinish }: SessionPageProps) {
         <div className="flex gap-2">
           <button
             onClick={() => setTimer(undefined, !isPaused)}
-            className="px-4 py-2 text-sm border border-zinc-300 hover:bg-zinc-100"
+            className="px-4 py-2 text-sm border border-zinc-300 hover:bg-zinc-100 cursor-pointer"
           >
             {isPaused ? "resume" : "pause"}
           </button>
           <button
             onClick={finish}
-            className="px-4 py-2 text-sm bg-zinc-900 text-white hover:bg-zinc-700"
+            className="px-4 py-2 text-sm bg-zinc-900 text-white hover:bg-zinc-700 cursor-pointer"
           >
             finish_
           </button>
         </div>
       </div>
 
-      <div className="flex-1 grid grid-cols-5 gap-4 overflow-hidden">
+      <div
+        className="flex-1 grid grid-cols-5 gap-4 overflow-hidden"
+        style={{ minHeight: 0 }}
+      >
         <div className="col-span-1 flex flex-col gap-4 overflow-y-auto">
           <div className="bg-zinc-50 border border-zinc-200 p-4">
             <p className="text-xs text-zinc-400 mb-2">// description</p>
@@ -213,49 +233,70 @@ export function SessionPage({ onFinish }: SessionPageProps) {
               </div>
             )}
 
-          <div className="border border-zinc-200 bg-white">
-            <div className="p-2 border-b border-zinc-100">
+          <div className="border border-zinc-200 bg-white flex flex-col">
+            <div className="p-2 border-b border-zinc-100 shrink-0">
               <span className="text-xs text-zinc-400">// ask llm</span>
             </div>
             <div className="p-2">
               <textarea
                 value={llmQuestion}
                 onChange={(e) => setLlmQuestion(e.target.value)}
-                placeholder="Ask about the problem..."
-                className="w-full p-2 text-sm border border-zinc-200 resize-none focus:outline-none focus:border-zinc-400"
+                onKeyDown={(e) =>
+                  e.key === "Enter" &&
+                  !e.shiftKey &&
+                  (e.preventDefault(), handleAskLlm())
+                }
+                placeholder={
+                  replyToId ? "Ask a follow-up..." : "Ask about the problem..."
+                }
+                className="w-full p-2 text-xs border border-zinc-200 resize-none focus:outline-none focus:border-zinc-400"
                 rows={2}
               />
-              <button
-                onClick={handleAskLlm}
-                disabled={llmLoadingId !== null || !llmQuestion.trim()}
-                className="mt-2 w-full py-1.5 text-sm bg-zinc-900 text-white hover:bg-zinc-700 disabled:opacity-50"
-              >
-                {llmLoadingId ? "..." : "ask"}
-              </button>
+              <div className="flex gap-1 mt-1">
+                <button
+                  onClick={handleAskLlm}
+                  disabled={llmLoadingId !== null || !llmQuestion.trim()}
+                  className="flex-1 py-1 text-xs bg-zinc-900 text-white hover:bg-zinc-700 disabled:opacity-50 cursor-pointer"
+                >
+                  {llmLoadingId ? "..." : "ask"}
+                </button>
+                {replyToId && (
+                  <button
+                    onClick={() => setReplyToId(null)}
+                    className="px-2 py-1 text-xs bg-zinc-100 border border-zinc-200 hover:bg-zinc-200 cursor-pointer"
+                  >
+                    cancel
+                  </button>
+                )}
+              </div>
             </div>
           </div>
 
-          <div className="border border-zinc-200 bg-white">
-            <div className="p-2 border-b border-zinc-100">
+          <div className="border border-zinc-200 bg-white flex flex-col min-h-[100px]">
+            <div className="p-2 border-b border-zinc-100 shrink-0">
               <span className="text-xs text-zinc-400">// my questions</span>
             </div>
-            <div className="p-2">
+            <div className="p-2 flex-1 overflow-y-auto">
               {questions.length > 0 && (
-                <div className="space-y-2 max-h-48 overflow-y-auto">
-                  {questions.map((q) => (
-                    <div key={q.id} className="text-xs">
-                      <div className="p-1.5 bg-zinc-50 text-zinc-600">
-                        {q.text}
-                      </div>
-                      {q.id.startsWith("temp-") && llmLoadingId === q.id ? (
-                        <div className="p-1.5 text-zinc-400">...</div>
-                      ) : q.answer ? (
-                        <div className="p-1.5 bg-zinc-100 text-zinc-500 whitespace-pre-wrap">
-                          {q.answer}
-                        </div>
-                      ) : null}
-                    </div>
-                  ))}
+                <div className="space-y-2">
+                  {questions
+                    .filter((q) => !q.parentId)
+                    .map((q) => (
+                      <QuestionThread
+                        key={q.id}
+                        question={q}
+                        allQuestions={questions}
+                        llmLoadingId={llmLoadingId}
+                        onReply={(parentId) => {
+                          setReplyToId(parentId);
+                          setLlmQuestion("");
+                        }}
+                        onSubmitReply={handleAskLlm}
+                        replyToId={replyToId}
+                        setLlmQuestion={setLlmQuestion}
+                        llmQuestion={llmQuestion}
+                      />
+                    ))}
                 </div>
               )}
             </div>
@@ -303,6 +344,107 @@ export function SessionPage({ onFinish }: SessionPageProps) {
           </div>
         </div>
       </div>
+    </div>
+  );
+}
+
+interface Question {
+  id: string;
+  text: string;
+  answer?: string;
+  timestamp: number;
+  parentId?: string;
+}
+
+interface QuestionThreadProps {
+  question: Question;
+  allQuestions: Question[];
+  llmLoadingId: string | null;
+  onReply: (parentId: string) => void;
+  onSubmitReply: () => void;
+  replyToId: string | null;
+  setLlmQuestion: (q: string) => void;
+  llmQuestion: string;
+}
+
+function QuestionThread({
+  question,
+  allQuestions,
+  llmLoadingId,
+  onReply,
+  onSubmitReply,
+  replyToId,
+  setLlmQuestion,
+  llmQuestion,
+}: QuestionThreadProps) {
+  const replies = allQuestions.filter((q) => q.parentId === question.id);
+
+  return (
+    <div className="border-l-2 border-zinc-200 pl-2 space-y-1">
+      <div className="text-xs">
+        <div className="p-1.5 bg-zinc-50 text-zinc-600">{question.text}</div>
+        {question.id.startsWith("temp-") && llmLoadingId === question.id ? (
+          <div className="p-1.5 text-zinc-400">...</div>
+        ) : question.answer ? (
+          <div className="p-1.5 bg-zinc-100 text-zinc-500 whitespace-pre-wrap">
+            {question.answer}
+          </div>
+        ) : null}
+        <button
+          onClick={() => onReply(question.id)}
+          className="text-xs text-zinc-400 hover:text-zinc-600 mt-1 cursor-pointer"
+        >
+          reply
+        </button>
+      </div>
+
+      {replies.map((reply) => (
+        <div key={reply.id} className="border-l-2 border-zinc-300 pl-2">
+          <div className="text-xs">
+            <div className="p-1.5 bg-zinc-50 text-zinc-600">{reply.text}</div>
+            {reply.id.startsWith("temp-") && llmLoadingId === reply.id ? (
+              <div className="p-1.5 text-zinc-400">...</div>
+            ) : reply.answer ? (
+              <div className="p-1.5 bg-zinc-100 text-zinc-500 whitespace-pre-wrap">
+                {reply.answer}
+              </div>
+            ) : null}
+          </div>
+        </div>
+      ))}
+
+      {replyToId === question.id && (
+        <div className="mt-1">
+          <textarea
+            value={llmQuestion}
+            onChange={(e) => setLlmQuestion(e.target.value)}
+            onKeyDown={(e) =>
+              e.key === "Enter" &&
+              !e.shiftKey &&
+              (e.preventDefault(), onSubmitReply())
+            }
+            placeholder="Ask a follow-up..."
+            className="w-full p-1.5 text-xs border border-zinc-300 resize-none focus:outline-none"
+            rows={2}
+            autoFocus
+          />
+          <div className="flex gap-1 mt-1">
+            <button
+              onClick={onSubmitReply}
+              disabled={!llmQuestion.trim()}
+              className="px-2 py-1 text-xs bg-zinc-900 text-white hover:bg-zinc-700 disabled:opacity-50 cursor-pointer"
+            >
+              send
+            </button>
+            <button
+              onClick={() => onReply("")}
+              className="px-2 py-1 text-xs bg-zinc-100 border border-zinc-200 hover:bg-zinc-200 cursor-pointer"
+            >
+              cancel
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

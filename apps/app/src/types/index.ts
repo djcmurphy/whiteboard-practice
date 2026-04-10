@@ -60,6 +60,7 @@ export interface Question {
   text: string;
   answer?: string;
   timestamp: number;
+  parentId?: string;
 }
 
 export interface ProblemData {
